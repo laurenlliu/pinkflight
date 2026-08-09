@@ -26,12 +26,34 @@ export class Controls {
 
     window.addEventListener('keydown', (e) => this._handle(e, true));
     window.addEventListener('keyup', (e) => this._handle(e, false));
-    window.addEventListener('mousedown', () => { this.state.fire = true; this._maybeStart(); });
+    window.addEventListener('mousedown', (e) => {
+      if (this._isUI(e.target)) return;
+      this.state.fire = true;
+      this._maybeStart();
+    });
     window.addEventListener('mouseup', () => { this.state.fire = false; });
-    window.addEventListener('touchstart', () => this._maybeStart(), { passive: true });
+    window.addEventListener('touchstart', (e) => {
+      if (this._isUI(e.target)) return;
+      this._maybeStart();
+    }, { passive: true });
+  }
+
+  // Clicks/taps on start/win overlays or the touch control buttons are UI actions,
+  // not in-game fire/start input — the elements' own handlers own those.
+  _isUI(target) {
+    return !!(target && target.closest && target.closest('.overlay, #touchControls, button'));
   }
 
   onStart(cb) { this._onStart = cb; }
+
+  // Public entry point for non-keyboard input sources (touch UI) to set flags and
+  // trigger the same "first input begins the flight" behavior as a keypress.
+  setTouch(key, value) {
+    this.state[key] = value;
+    if (value) this._maybeStart();
+  }
+
+  begin() { this._maybeStart(); }
 
   _maybeStart() {
     if (!this.started) {
