@@ -113,6 +113,40 @@ export class SoundEngine {
     this._envTone(1320, { type: 'sine', attack: 0.005, decay: 0.3, gain: 0.16, delay: 0.1 });
   }
 
+  playHit() {
+    if (!this.unlocked) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, t0);
+    osc.frequency.exponentialRampToValueAtTime(60, t0 + 0.18);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+    osc.connect(g);
+    g.connect(this.master);
+    osc.start(t0);
+    osc.stop(t0 + 0.22);
+  }
+
+  playScare() {
+    if (!this.unlocked) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(700, t0);
+    osc.frequency.exponentialRampToValueAtTime(200, t0 + 0.22);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.18, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
+    osc.connect(g);
+    g.connect(this.master);
+    osc.start(t0);
+    osc.stop(t0 + 0.27);
+  }
+
   playTakeoff() {
     if (!this.unlocked) return;
     const ctx = this.ctx;
