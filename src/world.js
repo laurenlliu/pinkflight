@@ -348,7 +348,9 @@ export const ENEMY_SPAWNS = [
   [1000, 100], [-1000, -600],
 ];
 
-export function buildWorld(scene, difficulty = 'easy') {
+// Builds the difficulty-independent parts of the world (terrain, sky, landmarks).
+// Called once at load so there's something pretty behind the start screen.
+export function buildStaticWorld(scene) {
   const terrain = buildTerrain();
   scene.add(terrain);
   buildSky(scene);
@@ -357,9 +359,6 @@ export function buildWorld(scene, difficulty = 'easy') {
   const spire = buildBlossomSpire(scene, 0, -900);
   const landingPad = buildLandingPad(scene, 0, 140);
   const sparkles = buildSparkles(scene);
-
-  const beaconCount = difficulty === 'hard' ? BEACON_SPOTS.length : 4;
-  const beacons = BEACON_SPOTS.slice(0, beaconCount).map(([x, z], i) => buildBeacon(scene, x, z, i));
 
   // Ambient + sun
   scene.add(new THREE.AmbientLight(0xffdff0, 0.6));
@@ -371,5 +370,11 @@ export function buildWorld(scene, difficulty = 'easy') {
   rim.position.set(500, 200, -600);
   scene.add(rim);
 
-  return { terrain, spire, landingPad, beacons, sparkles, worldSize: WORLD_SIZE, difficulty };
+  return { terrain, spire, landingPad, sparkles, worldSize: WORLD_SIZE };
+}
+
+// Builds the beacons for the chosen difficulty. Called once the player picks a mode.
+export function buildBeacons(scene, difficulty) {
+  const beaconCount = difficulty === 'hard' ? BEACON_SPOTS.length : 4;
+  return BEACON_SPOTS.slice(0, beaconCount).map(([x, z], i) => buildBeacon(scene, x, z, i));
 }
