@@ -8,6 +8,7 @@ import { SoundEngine } from './audio.js';
 import { createEnemies, updateEnemies, checkFireScares } from './enemies.js';
 import { buildRingCourse, updateRace, formatTime, getBestTime, maybeSaveBestTime } from './racing.js';
 import { createWeather } from './weather.js';
+import { DRAGON_SKINS, getSkin, loadSavedSkinId, saveSkinId } from './skins.js';
 
 const app = document.getElementById('app');
 
@@ -23,7 +24,8 @@ const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerH
 // The static world (terrain, sky, landmarks) renders immediately behind the start
 // screen; beacons/enemies/rings are created once the player picks a mode.
 const world = buildStaticWorld(scene);
-const dragon = new Dragon(scene);
+const savedSkinId = loadSavedSkinId();
+const dragon = new Dragon(scene, getSkin(savedSkinId));
 dragon.position.set(0, heightAt(0, 140) + GROUND_CLEARANCE, 140);
 dragon.isLanded = true;
 dragon.yaw = Math.PI;
@@ -33,6 +35,10 @@ const fire = new FireBreath(scene);
 const ui = new UI();
 const sound = new SoundEngine();
 ui.bindTouchControls(controls);
+ui.buildSkinPicker(DRAGON_SKINS, savedSkinId, (skin) => {
+  dragon.applySkin(skin);
+  saveSkinId(skin.id);
+});
 const weather = createWeather(world, scene);
 
 const bestTime = getBestTime();
@@ -166,6 +172,7 @@ function frame() {
   const weatherState = weather.update(dt, sound);
   dragon.windForce.copy(weatherState.windForce);
   world.sparkles.update(dt, elapsedTime, weatherState.stormIntensity);
+  dragon.updateSkinAnimation(dt); // keeps the Rainbow skin cycling even on the start screen
 
   if (weatherState.isStorm && !prevStorming) ui.setWeatherPrompt('A storm rolls in…');
   if (!weatherState.isStorm && prevStorming) ui.setWeatherPrompt('The storm passes');
@@ -246,7 +253,7 @@ requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   window.__debug = {
-    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer, weather,
+    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer, weather, DRAGON_SKINS,
     get beacons() { return beacons; },
     get enemies() { return enemies; },
     get raceRings() { return raceRings; },

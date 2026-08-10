@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DRAGON_SKINS } from './skins.js';
 
 const DEG = Math.PI / 180;
 
@@ -52,7 +53,7 @@ function buildWing(side) {
   membrane.position.set(side * 12, -2, 6);
   forearmPivot.add(membrane);
 
-  return { wingRoot, forearmPivot };
+  return { wingRoot, forearmPivot, boneMat, membraneMat };
 }
 
 function buildTail() {
@@ -82,14 +83,16 @@ function buildTail() {
     segments.push(seg);
     prev = seg;
   }
-  return { tail, segments };
+  return { tail, segments, segMat, spikeMat };
 }
 
 export class Dragon {
-  constructor(scene) {
+  constructor(scene, skin) {
     this.group = new THREE.Group();
     this._buildModel();
     scene.add(this.group);
+    this._skinTime = 0;
+    this.applySkin(skin || DRAGON_SKINS[0]);
 
     // Flight state
     this.yaw = 0;
@@ -118,6 +121,9 @@ export class Dragon {
     const bodyMat = scaleMat(0xe83f96, { roughness: 0.5, metalness: 0.2 });
     const bellyMat = scaleMat(0xffd3ea, { roughness: 0.6 });
     const darkMat = scaleMat(0x7a1052);
+    this.bodyMat = bodyMat;
+    this.bellyMat = bellyMat;
+    this.darkMat = darkMat;
 
     // Torso
     const torso = new THREE.Mesh(new THREE.SphereGeometry(14, 10, 8), bodyMat);
@@ -178,10 +184,14 @@ export class Dragon {
     right.wingRoot.position.set(0, 9, -8);
     this.group.add(left.wingRoot, right.wingRoot);
     this.wings = [left, right];
+    this.wingBoneMats = [left.boneMat, right.boneMat];
+    this.wingMembraneMats = [left.membraneMat, right.membraneMat];
 
     // Legs: hang down when landed, tuck up against the body in flight.
     const legMat = scaleMat(0xb02070);
     const footMat = scaleMat(0x7a1052, { roughness: 0.6 });
+    this.legMat = legMat;
+    this.footMat = footMat;
     this.legs = [];
     for (const [sx, sz] of [[-9, 6], [9, 6], [-7, -16], [7, -16]]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 1.8, 16, 6), legMat);
@@ -211,10 +221,12 @@ export class Dragon {
     this._legFold = 0;
 
     // Tail
-    const { tail } = buildTail();
+    const { tail, segMat, spikeMat } = buildTail();
     tail.position.set(0, 2, 16);
     this.group.add(tail);
     this.tailRoot = tail;
+    this.tailSegMat = segMat;
+    this.tailSpikeMat = spikeMat;
 
     // Saddle marker (camera / rider anchor, just above shoulders)
     this.saddleAnchor = new THREE.Object3D();
@@ -222,6 +234,51 @@ export class Dragon {
     this.group.add(this.saddleAnchor);
 
     this.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  }
+
+  // Repaints the existing materials in place — no geometry rebuild, so this is
+  // cheap enough to call live from a start-screen color picker for preview.
+  applySkin(skin) {
+    this.skin = skin;
+    if (skin.animated) return; // handled continuously by updateSkinAnimation instead
+    this.bodyMat.color.set(skin.body);
+    this.bellyMat.color.set(skin.belly);
+    this.darkMat.color.set(skin.dark);
+    this.tailSegMat.color.set(skin.body);
+    this.tailSpikeMat.color.set(skin.dark);
+    this.legMat.color.set(skin.accent);
+    this.footMat.color.set(skin.dark);
+    for (const m of this.wingBoneMats) m.color.set(skin.accent);
+    for (const m of this.wingMembraneMats) {
+      m.color.set(skin.membrane);
+      m.emissive.set(skin.membraneEmissive);
+    }
+  }
+
+  // Called every frame (even while idle on the start screen) so the Rainbow
+  // skin animates continuously; a no-op for any static skin.
+  updateSkinAnimation(dt) {
+    if (!this.skin || !this.skin.animated) return;
+    this._skinTime += dt;
+    const hue = (this._skinTime * 0.12) % 1;
+    const c = new THREE.Color();
+    const paint = (mat, hueOffset, s, l) => {
+      c.setHSL((hue + hueOffset + 1) % 1, s, l);
+      mat.color.copy(c);
+    };
+    paint(this.bodyMat, 0, 0.75, 0.55);
+    paint(this.bellyMat, 0.08, 0.6, 0.85);
+    paint(this.darkMat, 0.02, 0.7, 0.25);
+    paint(this.tailSegMat, 0, 0.75, 0.55);
+    paint(this.tailSpikeMat, 0.02, 0.7, 0.25);
+    paint(this.legMat, 0.05, 0.7, 0.45);
+    paint(this.footMat, 0.02, 0.7, 0.3);
+    for (const m of this.wingBoneMats) paint(m, 0.05, 0.7, 0.45);
+    for (const m of this.wingMembraneMats) {
+      paint(m, 0.1, 0.7, 0.65);
+      c.setHSL((hue + 0.15) % 1, 0.9, 0.5);
+      m.emissive.copy(c);
+    }
   }
 
   getAltitudeAbove(groundY) {

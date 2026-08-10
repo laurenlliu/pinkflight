@@ -45,6 +45,14 @@ const STYLE = `
   .overlay .controls b { color: #ffd166; }
   .overlay .touchHint { font-size: 13px; opacity: 0.75; margin-top: -14px; margin-bottom: 22px; }
 
+  .skinPickerWrap { margin-bottom: 22px; }
+  .skinPickerLabel { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.75; margin-bottom: 10px; }
+  .skinPicker { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+  .skinSwatch { pointer-events: all; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.28); padding: 0; transition: transform 0.12s ease, border-color 0.12s ease; box-shadow: 0 3px 8px rgba(30,8,40,0.5); }
+  .skinSwatch:hover { transform: scale(1.14); }
+  .skinSwatch.selected { border-color: #ffd166; box-shadow: 0 0 12px rgba(255,209,102,0.75); }
+  #skinName { font-size: 13px; font-weight: 600; opacity: 0.85; min-height: 16px; }
+
   .modeRow { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
   .modeBtn { pointer-events: all; cursor: pointer; border: 2px solid rgba(255,214,240,0.4); color: #fff0f8; font-family: inherit; font-weight: 700; font-size: 16px; letter-spacing: 1px; padding: 16px 30px; border-radius: 14px; box-shadow: 0 6px 18px rgba(30,8,40,0.5); display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform 0.12s ease; }
   .modeBtn:hover { transform: translateY(-2px); }
@@ -141,6 +149,36 @@ export class UI {
     if (el) el.textContent = text;
   }
 
+  // Renders the swatch row into the start screen and wires clicks. onChange
+  // fires with the full skin object for live-preview repainting of the dragon
+  // already visible behind the overlay.
+  buildSkinPicker(skins, selectedId, onChange) {
+    const container = this.startOverlay.querySelector('#skinPicker');
+    const nameEl = this.startOverlay.querySelector('#skinName');
+    let current = selectedId;
+    const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+    const render = () => {
+      container.innerHTML = '';
+      for (const skin of skins) {
+        const btn = document.createElement('button');
+        btn.className = 'skinSwatch' + (skin.id === current ? ' selected' : '');
+        btn.style.background = skin.animated
+          ? 'conic-gradient(from 0deg, #ff5f5f, #ffd166, #7dff9c, #5fe0ff, #a878ff, #ff5fbf, #ff5f5f)'
+          : `linear-gradient(135deg, ${hex(skin.body)}, ${hex(skin.belly)})`;
+        btn.title = skin.name;
+        btn.addEventListener('click', () => {
+          current = skin.id;
+          onChange(skin);
+          render();
+        });
+        container.appendChild(btn);
+      }
+      const sel = skins.find((s) => s.id === current);
+      if (nameEl && sel) nameEl.textContent = sel.name;
+    };
+    render();
+  }
+
   _buildStart() {
     const el = document.createElement('div');
     el.className = 'overlay';
@@ -157,6 +195,11 @@ export class UI {
         <div><b>F</b></div><div>Breathe fire</div>
       </div>`}
       ${isTouch ? '<div class="touchHint">Joystick to steer · FLAP to lift off · hold 🔥 to breathe fire</div>' : ''}
+      <div class="skinPickerWrap">
+        <div class="skinPickerLabel">Choose your dragon</div>
+        <div id="skinPicker" class="skinPicker"></div>
+        <div id="skinName"></div>
+      </div>
       <div class="modeRow">
         <button class="modeBtn easy" data-mode="easy">
           <span>🌸 Easy Skies</span>
