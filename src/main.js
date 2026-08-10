@@ -400,6 +400,7 @@ function frame() {
       const avgFps = (perfFrames / elapsedMs) * 1000;
       if (avgFps >= 55) renderer.shadowMap.enabled = true;
       if (avgFps < 40) bloomPass.enabled = false;
+      if (avgFps < 30) fire.setLowQuality();
     }
   }
 

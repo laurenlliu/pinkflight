@@ -16,7 +16,10 @@ function makeFlameTexture() {
   return tex;
 }
 
-const MAX_PARTICLES = 500;
+// Large additively-blended sprites overlapping at close range (the mouth) are
+// expensive fill-rate — this was a real stutter source during actual fire
+// breathing on weaker GPUs, not just a big number for its own sake.
+const MAX_PARTICLES = 260;
 
 // PointsMaterial ignores a per-vertex "size" attribute — it only has one flat
 // material.size for every point. A small custom shader is what actually makes
@@ -75,6 +78,17 @@ export class FireBreath {
     this.coneAngle = Math.PI / 8;
     this._light = new THREE.PointLight(0xff8a3a, 0, 150, 2);
     scene.add(this._light);
+    // Adaptive quality can pull this down further on devices that are still
+    // struggling — see setLowQuality().
+    this.qualityScale = 1;
+  }
+
+  // Called by the adaptive-quality check in main.js when a device is still
+  // dropping frames even with shadows/bloom already off — fire breathing is
+  // its own separate cost (overdraw from stacked additive sprites), so it
+  // gets its own downgrade rather than assuming the earlier ones covered it.
+  setLowQuality() {
+    this.qualityScale = 0.5;
   }
 
   update(dt, dragon, beacons, firing) {
@@ -87,7 +101,7 @@ export class FireBreath {
       this._light.position.copy(mouthPos);
       this._light.intensity = 7 + Math.random() * 2.5;
 
-      const emitCount = Math.round(dt * 260);
+      const emitCount = Math.round(dt * 190 * this.qualityScale);
       for (let i = 0; i < emitCount; i++) this._emit(mouthPos, fwd);
 
       this._igniteCheck(mouthPos, fwd, beacons);
@@ -115,7 +129,7 @@ export class FireBreath {
     p.vel.y += 4;
     p.life = 0;
     p.maxLife = 0.5 + Math.random() * 0.35;
-    p.size = 26 + Math.random() * 22;
+    p.size = (26 + Math.random() * 22) * (0.7 + 0.3 * this.qualityScale);
   }
 
   _simulate(dt) {
