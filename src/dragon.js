@@ -350,10 +350,13 @@ export class Dragon {
 
     // --- Vertical motion ---
     // Pitch attitude (via dir.y below) is the primary, reliable climb/dive control so nose-down
-    // always loses altitude and nose-up always gains it. velY is just a light secondary layer:
-    // a gentle constant sink (so hovering forever isn't free) plus flap impulses.
-    const gravity = 6;
-    this.velY -= gravity * dt;
+    // always loses altitude and nose-up always gains it. velY is a light secondary layer: a
+    // speed-proportional passive lift (so cruising level holds or gently gains height, rather
+    // than bleeding altitude toward the terrain the whole flight) plus flap impulses. Only very
+    // slow flight actually sinks, same as a real stall.
+    const gravity = 5;
+    const passiveLift = this.speed * 0.2;
+    this.velY += (passiveLift - gravity) * dt;
     this.velY *= 0.98;
     this.velY = THREE.MathUtils.clamp(this.velY, -20, 40);
 
