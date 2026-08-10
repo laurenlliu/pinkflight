@@ -50,14 +50,16 @@ const STYLE = `
   .overlay h1 { font-size: clamp(32px, 6vw, 64px); letter-spacing: 4px; font-weight: 800; color: #ffe3f5; text-shadow: 0 0 30px rgba(255,111,176,0.9), 0 0 60px rgba(176,111,224,0.7), 0 2px 10px rgba(10,4,16,0.8); margin: 0 0 6px; }
   .overlay .flavor { color: #f0d9ee; opacity: 0.95; font-size: 15px; max-width: 560px; margin-bottom: 22px; line-height: 1.55; text-shadow: 0 1px 6px rgba(10,4,16,0.9), 0 0 16px rgba(10,4,16,0.6); }
 
-  /* Start screen content hugs the left ~55% so the dragon showcase (camera
-     framed to the right, see updateShowcaseCamera) has clear space to its
-     right instead of sitting directly behind the text. */
-  #startOverlay { align-items: flex-start; justify-content: flex-start; padding-top: 4vh; padding-bottom: 4vh; }
-  #startOverlay .startContent { max-width: 480px; width: 100%; padding-left: 4vw; box-sizing: border-box; }
-  @media (max-width: 640px) {
-    #startOverlay { align-items: center; }
-    #startOverlay .startContent { padding-left: 0; max-width: 100%; }
+  /* Default: original centered, full-width-ish layout — fits and scrolls
+     safely on any screen. Narrowing this column made text wrap onto more
+     lines and pushed the mode buttons below the fold on typical windows, so
+     that's now an enhancement gated on screens wide enough to afford both a
+     readable column AND a clear showcase zone to its right (see
+     updateShowcaseCamera), not the default. */
+  #startOverlay .startContent { max-width: 720px; width: 100%; }
+  @media (min-width: 1000px) {
+    #startOverlay { align-items: flex-start; justify-content: flex-start; padding-top: 4vh; padding-bottom: 4vh; }
+    #startOverlay .startContent { max-width: 480px; padding-left: 4vw; box-sizing: border-box; }
   }
   .overlay .controls { display: grid; grid-template-columns: auto auto; gap: 6px 18px; text-align: left; color: #fff0f8; font-size: 14px; margin-bottom: 26px; background: rgba(80,30,90,0.3); padding: 16px 22px; border-radius: 14px; border: 1px solid rgba(255,214,240,0.3); }
   .overlay .controls b { color: #ffd166; }
@@ -65,6 +67,8 @@ const STYLE = `
 
   .skinPickerWrap { margin-bottom: 22px; }
   .skinPickerLabel { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.75; margin-bottom: 10px; }
+  .wideHint { display: none; }
+  @media (min-width: 1000px) { .wideHint { display: inline; } }
   .skinPicker { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
   .skinSwatch { pointer-events: all; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.28); padding: 0; transition: transform 0.12s ease, border-color 0.12s ease; box-shadow: 0 3px 8px rgba(30,8,40,0.5); }
   .skinSwatch:hover { transform: scale(1.14); }
@@ -216,7 +220,7 @@ export class UI {
         </div>`}
         ${isTouch ? '<div class="touchHint">Joystick to steer · FLAP to lift off · hold 🔥 to breathe fire</div>' : ''}
         <div class="skinPickerWrap">
-          <div class="skinPickerLabel">Choose your dragon — see it live on the right →</div>
+          <div class="skinPickerLabel">Choose your dragon<span class="wideHint"> — see it live on the right →</span></div>
           <div id="skinPicker" class="skinPicker"></div>
           <div id="skinName"></div>
         </div>
