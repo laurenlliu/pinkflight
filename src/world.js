@@ -376,12 +376,12 @@ export function buildStaticWorld(scene) {
   const sun = new THREE.DirectionalLight(0xffe2f0, 1.5);
   sun.position.set(-600, 800, 300);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.4;
   // Frustum stays tight (not sized to the whole 3600-unit world) since
   // updateSunShadow() below re-centers it on the dragon every frame.
-  const SHADOW_HALF = 260;
+  const SHADOW_HALF = 200;
   sun.shadow.camera.left = -SHADOW_HALF;
   sun.shadow.camera.right = SHADOW_HALF;
   sun.shadow.camera.top = SHADOW_HALF;

@@ -27,7 +27,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -38,8 +38,10 @@ const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerH
 // genuinely emissive/bright spots, not the whole sunlit scene.
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
+// Bloom's blur chain is rendered at half resolution — it's a soft effect anyway,
+// so the quality loss is invisible but the cost is ~4x cheaper.
 const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
   0.55, 0.4, 0.82
 );
 composer.addPass(bloomPass);
@@ -366,11 +368,33 @@ let prevLitCount = 0;
 let prevBoost = false;
 let prevStorming = false;
 
+// Adaptive quality: shadows and bloom are the priciest effects, and device
+// GPUs vary wildly (integrated laptop chips vs. discrete desktops). Rather
+// than pick one fixed setting, sample real frame time during actual gameplay
+// and drop the expensive effects if the device can't keep up — checked once,
+// a few seconds in, so startup jank doesn't trigger a false downgrade.
+let perfCheckStart = null;
+let perfFrames = 0;
+let perfChecked = false;
+const PERF_SAMPLE_SECONDS = 3;
+
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
   if (paused) { composer.render(); return; }
   elapsedTime += dt;
+
+  if (started && !perfChecked) {
+    if (perfCheckStart === null) perfCheckStart = performance.now();
+    perfFrames++;
+    const elapsedMs = performance.now() - perfCheckStart;
+    if (elapsedMs > PERF_SAMPLE_SECONDS * 1000) {
+      perfChecked = true;
+      const avgFps = (perfFrames / elapsedMs) * 1000;
+      if (avgFps < 45) bloomPass.enabled = false;
+      if (avgFps < 30) renderer.shadowMap.enabled = false;
+    }
+  }
 
   const weatherState = weather.update(dt, sound);
   dragon.windForce.copy(weatherState.windForce);
@@ -531,13 +555,16 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  // composer.setSize hands the bloom pass full resolution, which it then halves
+  // internally — reapply our extra halving so it stays cheap after a resize too.
+  bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
 });
 
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   window.__debug = {
-    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer, weather, DRAGON_SKINS,
+    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer, weather, DRAGON_SKINS, composer, bloomPass,
     get beacons() { return beacons; },
     get enemies() { return enemies; },
     get raceRings() { return raceRings; },
