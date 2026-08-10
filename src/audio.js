@@ -18,7 +18,86 @@ export class SoundEngine {
     this.master.connect(this.ctx.destination);
     this._buildWind();
     this._buildFire();
+    this._buildMusic();
     if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  // --- Generative ambient music: no fixed loop, just an ever-evolving pad +
+  // sparkle texture over a major-pentatonic scale, so it never has a jarring
+  // loop point and stays fresh through a whole play session. ---
+  _buildMusic() {
+    const ctx = this.ctx;
+    this._musicBus = ctx.createGain();
+    this._musicBus.gain.value = 0.2;
+    this._musicBus.connect(this.master);
+    this._musicOn = true;
+    this._musicDuck = 1;
+    this._musicScale = [261.63, 293.66, 329.63, 392.0, 440.0]; // C D E G A
+    this._queueChord(300);
+    this._queueSparkle(1800);
+  }
+
+  _queueChord(delayMs) {
+    clearTimeout(this._chordTimer);
+    this._chordTimer = setTimeout(() => {
+      if (this._musicOn) this._playChord();
+      this._queueChord(4500 + Math.random() * 3500);
+    }, delayMs);
+  }
+
+  _queueSparkle(delayMs) {
+    clearTimeout(this._sparkleTimer);
+    this._sparkleTimer = setTimeout(() => {
+      if (this._musicOn && Math.random() < 0.7) this._playSparkle();
+      this._queueSparkle(2200 + Math.random() * 2600);
+    }, delayMs);
+  }
+
+  _playChord() {
+    const ctx = this.ctx;
+    const scale = this._musicScale;
+    const i = Math.floor(Math.random() * scale.length);
+    const octave = Math.random() < 0.5 ? 0.5 : 1;
+    const chordIdx = [i, (i + 2) % scale.length, (i + 4) % scale.length];
+    const t0 = ctx.currentTime;
+    chordIdx.forEach((idx, voice) => {
+      const freq = scale[idx] * octave * (voice === 2 ? 2 : 1);
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.detune.value = (Math.random() - 0.5) * 6;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 1200;
+      const g = ctx.createGain();
+      const peak = 0.09 - voice * 0.015;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + 2.2);
+      g.gain.linearRampToValueAtTime(0, t0 + 7.5);
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(this._musicBus);
+      osc.start(t0);
+      osc.stop(t0 + 7.6);
+    });
+  }
+
+  _playSparkle() {
+    const ctx = this.ctx;
+    const scale = this._musicScale;
+    const freq = scale[Math.floor(Math.random() * scale.length)] * 2;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.06, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4);
+    osc.connect(g);
+    g.connect(this._musicBus);
+    osc.start(t0);
+    osc.stop(t0 + 1.5);
   }
 
   _noiseBuffer(seconds = 2) {
@@ -66,7 +145,7 @@ export class SoundEngine {
   }
 
   // Called every frame with live flight/fire state to modulate ambient loops.
-  update(dt, { speed, maxSpeed, firing, isLanded }) {
+  update(dt, { speed, maxSpeed, firing, isLanded, stormIntensity = 0 }) {
     if (!this.unlocked) return;
     const now = this.ctx.currentTime;
     const speedT = Math.min(1, speed / maxSpeed);
@@ -83,6 +162,12 @@ export class SoundEngine {
         this._fire.jitterT = 0;
         this._fire.filter.frequency.setTargetAtTime(700 + Math.random() * 500, now, 0.05);
       }
+    }
+
+    // Duck the music bed under thunder/wind during a storm.
+    if (this._musicBus) {
+      const target = 0.2 * (1 - stormIntensity * 0.55);
+      this._musicBus.gain.setTargetAtTime(target, now, 1.5);
     }
   }
 
@@ -138,6 +223,28 @@ export class SoundEngine {
     filter.connect(g);
     g.connect(this.master);
     src.start(t0);
+  }
+
+  playStormBurst() {
+    if (!this.unlocked) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer(0.7);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 0.8;
+    filter.frequency.setValueAtTime(200, t0);
+    filter.frequency.exponentialRampToValueAtTime(1800, t0 + 0.3);
+    filter.frequency.exponentialRampToValueAtTime(300, t0 + 0.6);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.4, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.65);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.master);
+    src.start(t0);
+    this._envTone(110, { type: 'sawtooth', attack: 0.01, decay: 0.3, gain: 0.2 });
   }
 
   playHit() {

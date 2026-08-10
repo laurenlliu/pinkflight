@@ -9,6 +9,8 @@ import { createEnemies, updateEnemies, checkFireScares } from './enemies.js';
 import { buildRingCourse, updateRace, formatTime, getBestTime, maybeSaveBestTime } from './racing.js';
 import { createWeather } from './weather.js';
 import { DRAGON_SKINS, getSkin, loadSavedSkinId, saveSkinId } from './skins.js';
+import { isUnlocked, updateProgress, getProgress } from './progress.js';
+import { spawnBoss, updateBoss, removeBoss, bossTelegraphActive, BURST_RADIUS, BURST_FORCE } from './boss.js';
 
 const app = document.getElementById('app');
 
@@ -39,12 +41,26 @@ ui.bindTouchControls(controls);
 ui.buildSkinPicker(DRAGON_SKINS, savedSkinId, (skin) => {
   dragon.applySkin(skin);
   saveSkinId(skin.id);
-});
+}, isUnlocked);
+
+// Applies a progress update and, if it unlocked anything new, shows a toast
+// for the first one (rare to get more than one at once, but handle it).
+function reportProgress(patch) {
+  const { newlyUnlocked } = updateProgress(patch);
+  if (newlyUnlocked.length > 0) {
+    const skin = DRAGON_SKINS.find((s) => s.id === newlyUnlocked[0]);
+    if (skin) {
+      ui.showUnlockToast(skin.name);
+      sound.playIgnite();
+    }
+  }
+}
 const weather = createWeather(world, scene);
 
 const bestTime = getBestTime();
 if (bestTime !== null) ui.setRaceBestHint(`10 rings · best ${formatTime(bestTime)}`);
 
+let totalSpritesScared = getProgress().spritesScared;
 let mode = null;
 let beacons = [];
 let enemies = [];
@@ -55,6 +71,7 @@ let raceFinished = false;
 let gameWon = false;
 let startTime = null;
 let started = false;
+let boss = null;
 
 function beginFlight(chosenMode) {
   if (started) return;
@@ -219,8 +236,11 @@ function currentObjective() {
   return { pos: nearest.position, label: 'Wishlight' };
 }
 
-function checkWin(state) {
+function checkWin(state, isStorm) {
   if (gameWon) return;
+  // Hard Skies' completion path is the Storm Queen boss fight (see
+  // spawnBoss/updateBoss) once all 8 wishlights are lit, not landing.
+  if (mode !== 'easy') return;
   if (beacons.length > 0 && litCount() === beacons.length && state.isLanded) {
     const distToPad = dragon.position.distanceTo(world.landingPad.position);
     if (distToPad < world.landingPad.radius + 10) {
@@ -230,6 +250,9 @@ function checkWin(state) {
       const s = Math.floor(elapsed % 60).toString().padStart(2, '0');
       ui.showWin(`${m}:${s}`);
       sound.playWin();
+      const patch = { completedEasy: true };
+      if (isStorm) patch.stormCompletion = true;
+      reportProgress(patch);
     }
   }
 }
@@ -242,6 +265,23 @@ function finishRace() {
   const best = getBestTime();
   ui.showRaceResult(formatTime(elapsed), isNewBest, best !== null ? formatTime(best) : '');
   sound.playWin();
+  reportProgress({ completedRace: true, bestRaceTime: getBestTime() });
+}
+
+// Loading splash lives in index.html so it paints before any JS runs; hide it
+// once the scene has actually painted a frame, with a small minimum display
+// time so it doesn't just flash on fast machines.
+const loadStart = performance.now();
+let firstFrame = true;
+function hideLoadingScreen() {
+  const el = document.getElementById('loading');
+  if (!el) return;
+  const minDisplay = 500;
+  const remaining = Math.max(0, minDisplay - (performance.now() - loadStart));
+  setTimeout(() => {
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 550);
+  }, remaining);
 }
 
 const clock = new THREE.Clock();
@@ -278,7 +318,7 @@ function frame() {
     prevIsLanded = state.isLanded;
     if (controls.state.boost && !prevBoost && state.speed > 5) sound.playBoost();
     prevBoost = controls.state.boost;
-    sound.update(dt, { speed: state.speed, maxSpeed: dragon.boostMaxSpeed, firing, isLanded: state.isLanded });
+    sound.update(dt, { speed: state.speed, maxSpeed: dragon.boostMaxSpeed, firing, isLanded: state.isLanded, stormIntensity: weatherState.stormIntensity });
 
     let hitShake = 0;
 
@@ -301,9 +341,7 @@ function frame() {
     } else {
       fire.update(dt, dragon, beacons, firing);
       ui.update(state, litCount(), beacons.length);
-      const objective = currentObjective();
-      updateWaypoint(objective.pos, objective.label);
-      checkWin(state);
+      checkWin(state, weatherState.isStorm);
 
       const lit = litCount();
       if (lit > prevLitCount) sound.playIgnite();
@@ -318,8 +356,62 @@ function frame() {
         }
         if (firing) {
           const scaredCount = checkFireScares(dragon, enemies);
-          if (scaredCount > 0) sound.playScare();
+          if (scaredCount > 0) {
+            sound.playScare();
+            totalSpritesScared += scaredCount;
+            reportProgress({ spritesScared: totalSpritesScared });
+          }
         }
+      }
+
+      // Hard Skies culminates in the Storm Queen once every wishlight is lit.
+      if (mode === 'hard' && !boss && !gameWon && lit === beacons.length) {
+        boss = spawnBoss(scene, world.landingPad.position.clone().add(new THREE.Vector3(0, 40, 0)));
+        ui.showBossIntro();
+        weather.forceStorm();
+        sound.playThunder();
+      }
+
+      if (boss) {
+        const mouthPos = dragon.getMouthWorldPosition(new THREE.Vector3());
+        const fwdVec = dragon.getForwardWorld(new THREE.Vector3());
+        const result = updateBoss(dt, boss, firing, mouthPos, fwdVec);
+        ui.updateBossHP(boss.hp);
+        if (bossTelegraphActive(boss)) ui.setPrompt('⚡ Storm Queen is charging — brace for wind! ⚡');
+
+        if (result.burst) {
+          sound.playStormBurst();
+          const toDragon = dragon.position.clone().sub(result.burstPosition);
+          const dist = toDragon.length();
+          if (dist < BURST_RADIUS) {
+            const falloff = 1 - dist / BURST_RADIUS;
+            toDragon.normalize();
+            dragon.position.addScaledVector(toDragon, BURST_FORCE * falloff);
+            dragon.velY += 10 * falloff;
+            hitShake = Math.max(hitShake, 0.8);
+            ui.flashHit();
+          }
+        }
+
+        if (result.justDefeated) {
+          gameWon = true;
+          ui.hideBossBar();
+          const elapsed = (performance.now() - startTime) / 1000;
+          const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+          const s = Math.floor(elapsed % 60).toString().padStart(2, '0');
+          ui.showWin(`${m}:${s}`);
+          sound.playWin();
+          reportProgress({ completedHard: true, stormCompletion: true });
+          const defeatedBoss = boss;
+          setTimeout(() => removeBoss(scene, defeatedBoss), 1400);
+        }
+      }
+
+      if (boss && !boss.defeated) {
+        updateWaypoint(boss.position, 'Storm Queen');
+      } else if (!gameWon) {
+        const objective = currentObjective();
+        updateWaypoint(objective.pos, objective.label);
       }
     }
 
@@ -339,6 +431,10 @@ function frame() {
   }
 
   renderer.render(scene, camera);
+  if (firstFrame) {
+    firstFrame = false;
+    hideLoadingScreen();
+  }
 }
 
 window.addEventListener('resize', () => {
@@ -356,5 +452,9 @@ if (import.meta.env.DEV) {
     get enemies() { return enemies; },
     get raceRings() { return raceRings; },
     get raceIndex() { return raceIndex; },
+    get boss() { return boss; },
+    updateBoss,
+    get mode() { return mode; },
+    get gameWon() { return gameWon; },
   };
 }

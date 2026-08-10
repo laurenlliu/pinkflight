@@ -13,6 +13,17 @@ const STYLE = `
     #objective .title { font-size: 12px; }
   }
 
+  #bossBar { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); width: min(72vw, 460px); display: none; text-align: center; }
+  #bossBar.show { display: block; }
+  #bossBar .bossLabel { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; font-weight: 700; color: #e8c9ff; margin-bottom: 5px; }
+  #bossBar .bar-track { height: 14px; border-color: rgba(224,169,255,0.5); }
+  #bossHpFill { background: linear-gradient(90deg,#b06fe0,#ff6fc0); transition: width 0.15s linear; }
+
+  #bossIntro { position: fixed; top: 40%; left: 50%; transform: translate(-50%,-50%) scale(0.9); text-align: center; z-index: 15; opacity: 0; transition: opacity 0.6s ease, transform 0.6s ease; pointer-events: none; }
+  #bossIntro.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  #bossIntro h2 { margin: 0; font-size: clamp(28px, 5vw, 48px); letter-spacing: 3px; font-weight: 800; color: #e8c9ff; text-shadow: 0 0 30px rgba(176,111,224,0.9), 0 0 60px rgba(255,111,196,0.6); }
+  #bossIntro p { margin: 8px 0 0; font-size: 15px; color: #f0d9ee; opacity: 0.9; }
+
   #bars { position: absolute; left: 26px; bottom: 26px; width: 220px; }
   .bar-row { margin-bottom: 10px; }
   .bar-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.85; margin-bottom: 3px; font-weight: 600; }
@@ -74,10 +85,15 @@ const STYLE = `
   .wideHint { display: none; }
   @media (min-width: 1000px) { .wideHint { display: inline; } }
   .skinPicker { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 6px; }
-  .skinSwatch { pointer-events: all; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.28); padding: 0; transition: transform 0.12s ease, border-color 0.12s ease; box-shadow: 0 3px 8px rgba(30,8,40,0.5); }
+  .skinSwatch { position: relative; pointer-events: all; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.28); padding: 0; transition: transform 0.12s ease, border-color 0.12s ease; box-shadow: 0 3px 8px rgba(30,8,40,0.5); }
   .skinSwatch:hover { transform: scale(1.14); }
   .skinSwatch.selected { border-color: #ffd166; box-shadow: 0 0 12px rgba(255,209,102,0.75); }
+  .skinSwatch.locked { filter: grayscale(0.85) brightness(0.5); cursor: help; }
+  .skinSwatch.locked::after { content: '🔒'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   #skinName { font-size: 12px; font-weight: 600; opacity: 0.85; min-height: 15px; }
+
+  #unlockToast { position: fixed; top: 26px; left: 50%; transform: translateX(-50%) translateY(-12px); z-index: 20; text-align: center; padding: 12px 26px; border-radius: 14px; background: linear-gradient(180deg, rgba(255,209,102,0.95), rgba(255,143,196,0.95)); color: #3a1608; font-weight: 800; font-size: 15px; letter-spacing: 0.5px; box-shadow: 0 8px 24px rgba(30,8,40,0.6); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; pointer-events: none; }
+  #unlockToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   .modeRow { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
   .modeBtn { pointer-events: all; cursor: pointer; border: 2px solid rgba(255,214,240,0.4); color: #fff0f8; font-family: inherit; font-weight: 700; font-size: 15px; letter-spacing: 1px; padding: 12px 22px; border-radius: 14px; box-shadow: 0 6px 18px rgba(30,8,40,0.5); display: flex; flex-direction: column; align-items: center; gap: 3px; transition: transform 0.12s ease; }
@@ -121,6 +137,14 @@ export class UI {
         <div class="title">Pinkflight</div>
         <div class="goal">Light the <span id="beaconCount">0 / 4</span> wishlights, then glide home to the Blossom Ring</div>
       </div>
+      <div id="bossBar" class="panel-text">
+        <div class="bossLabel">Storm Queen</div>
+        <div class="bar-track"><div id="bossHpFill" class="bar-fill" style="width:100%"></div></div>
+      </div>
+      <div id="bossIntro">
+        <h2>The Storm Queen Descends</h2>
+        <p>Breathe fire on her core — dodge her wind when she charges!</p>
+      </div>
       <div id="waypoint" class="panel-text">
         <div id="waypointArrow"></div>
         <div id="waypointRing"></div>
@@ -129,6 +153,7 @@ export class UI {
       <div id="reticle"></div>
       <div id="promptCenter" class="panel-text"></div>
       <div id="weatherPrompt"></div>
+      <div id="unlockToast"></div>
       <div id="hitFlash"></div>
       <div id="bars">
         <div class="bar-row"><div class="bar-label panel-text">Speed</div><div class="bar-track"><div id="speedFill" class="bar-fill" style="width:0%"></div></div></div>
@@ -158,8 +183,13 @@ export class UI {
       waypointLabel: hud.querySelector('#waypointLabel'),
       hitFlash: hud.querySelector('#hitFlash'),
       weatherPrompt: hud.querySelector('#weatherPrompt'),
+      unlockToast: hud.querySelector('#unlockToast'),
+      bossBar: hud.querySelector('#bossBar'),
+      bossHpFill: hud.querySelector('#bossHpFill'),
+      bossIntro: hud.querySelector('#bossIntro'),
     };
     this._weatherPromptTimeout = null;
+    this._unlockToastTimeout = null;
 
     this.startOverlay = this._buildStart();
     this.winOverlay = this._buildWin();
@@ -178,22 +208,35 @@ export class UI {
 
   // Renders the swatch row into the start screen and wires clicks. onChange
   // fires with the full skin object for live-preview repainting of the dragon
-  // already visible behind the overlay.
-  buildSkinPicker(skins, selectedId, onChange) {
+  // already visible behind the overlay. isUnlockedFn(skinId) gates locked
+  // skins: they render dim with a lock icon, and clicking one shows its
+  // unlock hint instead of selecting it.
+  buildSkinPicker(skins, selectedId, onChange, isUnlockedFn) {
     const container = this.startOverlay.querySelector('#skinPicker');
     const nameEl = this.startOverlay.querySelector('#skinName');
     let current = selectedId;
+    let hintTimeout = null;
     const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
     const render = () => {
       container.innerHTML = '';
       for (const skin of skins) {
+        const unlocked = isUnlockedFn ? isUnlockedFn(skin.id) : true;
         const btn = document.createElement('button');
-        btn.className = 'skinSwatch' + (skin.id === current ? ' selected' : '');
+        btn.className = 'skinSwatch' + (skin.id === current ? ' selected' : '') + (unlocked ? '' : ' locked');
         btn.style.background = skin.animated
           ? 'conic-gradient(from 0deg, #ff5f5f, #ffd166, #7dff9c, #5fe0ff, #a878ff, #ff5fbf, #ff5f5f)'
           : `linear-gradient(135deg, ${hex(skin.body)}, ${hex(skin.belly)})`;
-        btn.title = skin.name;
+        btn.title = unlocked ? skin.name : `Locked — ${skin.unlockHint}`;
         btn.addEventListener('click', () => {
+          if (!unlocked) {
+            clearTimeout(hintTimeout);
+            if (nameEl) nameEl.textContent = `🔒 ${skin.unlockHint}`;
+            hintTimeout = setTimeout(() => {
+              const sel = skins.find((s) => s.id === current);
+              if (nameEl && sel) nameEl.textContent = sel.name;
+            }, 2200);
+            return;
+          }
           current = skin.id;
           onChange(skin);
           render();
@@ -403,6 +446,31 @@ export class UI {
     this.els.weatherPrompt.textContent = text;
     this.els.weatherPrompt.classList.add('show');
     this._weatherPromptTimeout = setTimeout(() => this.els.weatherPrompt.classList.remove('show'), 4000);
+  }
+
+  showUnlockToast(skinName) {
+    clearTimeout(this._unlockToastTimeout);
+    this.els.unlockToast.textContent = `✨ New dragon unlocked: ${skinName}! ✨`;
+    this.els.unlockToast.classList.add('show');
+    this._unlockToastTimeout = setTimeout(() => this.els.unlockToast.classList.remove('show'), 4500);
+  }
+
+  // --- Storm Queen boss ---
+
+  showBossIntro() {
+    this.els.goalText.textContent = 'Defeat the Storm Queen!';
+    this.els.bossBar.classList.add('show');
+    this.els.bossIntro.classList.add('show');
+    clearTimeout(this._bossIntroTimeout);
+    this._bossIntroTimeout = setTimeout(() => this.els.bossIntro.classList.remove('show'), 4000);
+  }
+
+  updateBossHP(hpFraction) {
+    this.els.bossHpFill.style.width = `${Math.max(0, hpFraction) * 100}%`;
+  }
+
+  hideBossBar() {
+    this.els.bossBar.classList.remove('show');
   }
 
   update(state, litCount, totalBeacons) {
