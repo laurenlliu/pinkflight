@@ -7,6 +7,7 @@ import { UI } from './ui.js';
 import { SoundEngine } from './audio.js';
 import { createEnemies, updateEnemies, checkFireScares } from './enemies.js';
 import { buildRingCourse, updateRace, formatTime, getBestTime, maybeSaveBestTime } from './racing.js';
+import { createWeather } from './weather.js';
 
 const app = document.getElementById('app');
 
@@ -32,6 +33,7 @@ const fire = new FireBreath(scene);
 const ui = new UI();
 const sound = new SoundEngine();
 ui.bindTouchControls(controls);
+const weather = createWeather(world, scene);
 
 const bestTime = getBestTime();
 if (bestTime !== null) ui.setRaceBestHint(`10 rings · best ${formatTime(bestTime)}`);
@@ -154,12 +156,20 @@ let elapsedTime = 0;
 let prevIsLanded = true;
 let prevLitCount = 0;
 let prevBoost = false;
+let prevStorming = false;
 
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
   elapsedTime += dt;
-  world.sparkles.update(dt, elapsedTime);
+
+  const weatherState = weather.update(dt, sound);
+  dragon.windForce.copy(weatherState.windForce);
+  world.sparkles.update(dt, elapsedTime, weatherState.stormIntensity);
+
+  if (weatherState.isStorm && !prevStorming) ui.setWeatherPrompt('A storm rolls in…');
+  if (!weatherState.isStorm && prevStorming) ui.setWeatherPrompt('The storm passes');
+  prevStorming = weatherState.isStorm;
 
   const running = started && !gameWon && !raceFinished;
 
@@ -216,10 +226,11 @@ function frame() {
       }
     }
 
-    const shakeTarget = (firing ? 0.35 : 0) + (controls.state.boost && state.speed > 5 ? 0.45 : 0) + hitShake;
+    const shakeTarget = (firing ? 0.35 : 0) + (controls.state.boost && state.speed > 5 ? 0.45 : 0)
+      + hitShake + weatherState.stormIntensity * 0.5;
     updateCamera(dt, shakeTarget);
   } else {
-    updateCamera(dt, 0);
+    updateCamera(dt, weatherState.stormIntensity * 0.3);
   }
 
   renderer.render(scene, camera);
@@ -235,7 +246,7 @@ requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   window.__debug = {
-    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer,
+    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer, weather,
     get beacons() { return beacons; },
     get enemies() { return enemies; },
     get raceRings() { return raceRings; },

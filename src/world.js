@@ -150,19 +150,25 @@ function buildSparkles(scene) {
   points.frustumCulled = false;
   scene.add(points);
 
+  const baseColor = new THREE.Color(0xffffff);
+  const stormColor = new THREE.Color(0x8a97c9);
   return {
-    update(dt, t) {
+    update(dt, t, stormIntensity = 0) {
       const pos = geo.attributes.position;
+      const fallSpeed = THREE.MathUtils.lerp(1, -18, stormIntensity); // rain falls in a storm
       for (let i = 0; i < count; i++) {
-        let y = pos.getY(i) + speeds[i] * dt;
+        let y = pos.getY(i) + speeds[i] * fallSpeed * dt;
         const x = pos.getX(i);
         const z = pos.getZ(i);
         const ceiling = heightAt(x, z) + 240;
-        if (y > ceiling) y = heightAt(x, z) + 5;
+        const floor = heightAt(x, z) + 5;
+        if (y > ceiling) y = floor;
+        if (y < floor) y = ceiling;
         pos.setY(i, y);
       }
       pos.needsUpdate = true;
-      mat.opacity = 0.7 + Math.sin(t * 1.3) * 0.15;
+      mat.opacity = (0.7 + Math.sin(t * 1.3) * 0.15) * THREE.MathUtils.lerp(1, 0.6, stormIntensity);
+      mat.color.lerpColors(baseColor, stormColor, stormIntensity);
     },
   };
 }
@@ -353,15 +359,17 @@ export const ENEMY_SPAWNS = [
 export function buildStaticWorld(scene) {
   const terrain = buildTerrain();
   scene.add(terrain);
-  buildSky(scene);
+  const sky = buildSky(scene);
   buildTrees(scene);
   buildRuins(scene);
   const spire = buildBlossomSpire(scene, 0, -900);
   const landingPad = buildLandingPad(scene, 0, 140);
   const sparkles = buildSparkles(scene);
 
-  // Ambient + sun
-  scene.add(new THREE.AmbientLight(0xffdff0, 0.6));
+  // Ambient + sun — kept as named lights (not just scene.add) so the weather
+  // cycle can animate their color/intensity over time.
+  const ambient = new THREE.AmbientLight(0xffdff0, 0.6);
+  scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xffe2f0, 1.5);
   sun.position.set(-600, 800, 300);
   sun.castShadow = false;
@@ -370,7 +378,7 @@ export function buildStaticWorld(scene) {
   rim.position.set(500, 200, -600);
   scene.add(rim);
 
-  return { terrain, spire, landingPad, sparkles, worldSize: WORLD_SIZE };
+  return { terrain, spire, landingPad, sparkles, sky, ambient, sun, rim, worldSize: WORLD_SIZE };
 }
 
 // Builds the beacons for the chosen difficulty. Called once the player picks a mode.

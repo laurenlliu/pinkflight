@@ -26,6 +26,9 @@ const STYLE = `
   #promptCenter { position: absolute; top: 62%; left: 50%; transform: translate(-50%,-50%); text-align: center; font-size: 22px; letter-spacing: 1px; opacity: 0; transition: opacity 0.3s; font-weight: 600; }
   #promptCenter.show { opacity: 1; }
 
+  #weatherPrompt { position: absolute; top: 200px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 16px; letter-spacing: 1px; opacity: 0; transition: opacity 0.6s; font-weight: 600; font-style: italic; color: #d9e0ff; }
+  #weatherPrompt.show { opacity: 1; }
+
   #reticle { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 10px; height: 10px; border: 2px solid rgba(255,214,240,0.7); border-radius: 50%; opacity: 0.6; }
 
   #compass { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -90,6 +93,7 @@ export class UI {
       </div>
       <div id="reticle"></div>
       <div id="promptCenter" class="panel-text"></div>
+      <div id="weatherPrompt"></div>
       <div id="hitFlash"></div>
       <div id="bars">
         <div class="bar-row"><div class="bar-label panel-text">Speed</div><div class="bar-track"><div id="speedFill" class="bar-fill" style="width:0%"></div></div></div>
@@ -118,7 +122,9 @@ export class UI {
       compassArrow: hud.querySelector('#compassArrow'),
       compassLabel: hud.querySelector('#compassLabel'),
       hitFlash: hud.querySelector('#hitFlash'),
+      weatherPrompt: hud.querySelector('#weatherPrompt'),
     };
+    this._weatherPromptTimeout = null;
 
     this.startOverlay = this._buildStart();
     this.winOverlay = this._buildWin();
@@ -314,6 +320,17 @@ export class UI {
     this.els.hitFlash.classList.add('show');
     clearTimeout(this._hitFlashTimeout);
     this._hitFlashTimeout = setTimeout(() => this.els.hitFlash.classList.remove('show'), 220);
+  }
+
+  setWeatherPrompt(text) {
+    clearTimeout(this._weatherPromptTimeout);
+    if (!text) {
+      this.els.weatherPrompt.classList.remove('show');
+      return;
+    }
+    this.els.weatherPrompt.textContent = text;
+    this.els.weatherPrompt.classList.add('show');
+    this._weatherPromptTimeout = setTimeout(() => this.els.weatherPrompt.classList.remove('show'), 4000);
   }
 
   update(state, litCount, totalBeacons, dragon, beacons, landingPad) {

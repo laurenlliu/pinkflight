@@ -102,6 +102,7 @@ export class Dragon {
     this.boostMaxSpeed = 96;
     this.position = new THREE.Vector3(0, 60, 260);
     this.velY = 0;
+    this.windForce = new THREE.Vector3(); // set externally (e.g. by the weather system)
 
     this.isLanded = false;
     this.stamina = 1; // boost fuel
@@ -308,6 +309,7 @@ export class Dragon {
     );
     this.position.addScaledVector(dir, this.speed * dt);
     this.position.y += this.velY * dt;
+    this.position.addScaledVector(this.windForce, dt); // storm gusts, no-op when calm
 
     // Ground collision / landing check — slope-aware so steep terrain slides the dragon
     // clear along the incline instead of just bouncing it straight up.

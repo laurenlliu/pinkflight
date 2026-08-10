@@ -120,6 +120,26 @@ export class SoundEngine {
     this._envTone(1568, { type: 'sine', attack: 0.002, decay: 0.12, gain: 0.14, delay: 0.03 });
   }
 
+  playThunder() {
+    if (!this.unlocked) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer(1.6);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(320, t0);
+    filter.frequency.exponentialRampToValueAtTime(70, t0 + 1.3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.4, t0 + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.6);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.master);
+    src.start(t0);
+  }
+
   playHit() {
     if (!this.unlocked) return;
     const ctx = this.ctx;
