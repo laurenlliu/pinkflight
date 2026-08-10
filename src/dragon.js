@@ -2,6 +2,13 @@ import * as THREE from 'three';
 
 const DEG = Math.PI / 180;
 
+// Vertical distance from the dragon's origin down to its feet in the grounded
+// leg pose (legs at y=-9, rotation.x=0.3 — see buildModel, foot bottom ~-16.6).
+// Used so landing rests the feet ON the ground instead of sinking the legs
+// through it. Slightly over the bare-terrain minimum so feet also clear the
+// landing pad's raised platform (~3 units tall) without a visible gap.
+export const GROUND_CLEARANCE = 22;
+
 function scaleMat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({
     color, flatShading: true, roughness: 0.55, metalness: 0.15, ...opts,
@@ -173,12 +180,30 @@ export class Dragon {
 
     // Legs: hang down when landed, tuck up against the body in flight.
     const legMat = scaleMat(0xb02070);
+    const footMat = scaleMat(0x7a1052, { roughness: 0.6 });
     this.legs = [];
     for (const [sx, sz] of [[-9, 6], [9, 6], [-7, -16], [7, -16]]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 1.8, 16, 6), legMat);
-      leg.userData.base = { sx, sz, groundedY: -9, tuckedY: -3, groundedRotX: 0.3, tuckedRotX: 1.35 };
+      // Tucked pose is a subtle draw-up, not a full fold — folding further hides
+      // the legs entirely inside the torso/belly geometry.
+      leg.userData.base = { sx, sz, groundedY: -9, tuckedY: -7, groundedRotX: 0.3, tuckedRotX: 0.55 };
       leg.position.set(sx, -9, sz);
       leg.rotation.x = 0.3;
+
+      // Paw + claws at the leg's bottom tip (children so they inherit the leg's
+      // own fold/ground animation for free).
+      const paw = new THREE.Mesh(new THREE.SphereGeometry(2.3, 8, 6), footMat);
+      paw.position.y = -8.3;
+      paw.scale.set(1, 0.7, 1.15);
+      leg.add(paw);
+      for (let c = 0; c < 3; c++) {
+        const ang = (c / 2) * 1.3 - 0.65;
+        const claw = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.6, 5), footMat);
+        claw.position.set(Math.sin(ang) * 1.7, -9.6, Math.cos(ang) * 1.7 - 1.2);
+        claw.rotation.x = Math.PI / 2 + 0.35;
+        leg.add(claw);
+      }
+
       this.group.add(leg);
       this.legs.push(leg);
     }
@@ -301,7 +326,7 @@ export class Dragon {
 
       if (this.speed < 22 && nearLevel && this.velY < 14 && slopeMag < 0.9) {
         this.isLanded = true;
-        this.position.y = newGroundY + 1.2;
+        this.position.y = newGroundY + GROUND_CLEARANCE;
         this.speed = 0;
         this.velY = 0;
         this.pitch = 0;
