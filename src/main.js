@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { buildStaticWorld, buildBeacons, heightAt } from './world.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { buildStaticWorld, buildBeacons, heightAt, updateSunShadow } from './world.js';
 import { Dragon, GROUND_CLEARANCE } from './dragon.js';
 import { Controls } from './controls.js';
 import { FireBreath } from './fire.js';
@@ -20,10 +24,26 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.5, 4000);
+
+// Bloom makes the fire breath, gems, and wishlights actually glow instead of
+// just being bright flat-shaded shapes. Threshold is high so it only catches
+// genuinely emissive/bright spots, not the whole sunlit scene.
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.55, 0.4, 0.82
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
 
 // The static world (terrain, sky, landmarks) renders immediately behind the start
 // screen; beacons/enemies/rings are created once the player picks a mode.
@@ -349,7 +369,7 @@ let prevStorming = false;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
-  if (paused) { renderer.render(scene, camera); return; }
+  if (paused) { composer.render(); return; }
   elapsedTime += dt;
 
   const weatherState = weather.update(dt, sound);
@@ -498,7 +518,8 @@ function frame() {
     ui.setWaypoint(null);
   }
 
-  renderer.render(scene, camera);
+  updateSunShadow(world.sun, dragon.position);
+  composer.render();
   if (firstFrame) {
     firstFrame = false;
     hideLoadingScreen();
@@ -509,6 +530,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 requestAnimationFrame(frame);

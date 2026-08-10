@@ -208,6 +208,7 @@ function buildBlossomSpire(scene, x, z) {
   glow.position.y = 480;
   group.add(glow);
 
+  group.traverse((obj) => { if (obj.isMesh) obj.castShadow = true; });
   scene.add(group);
   return group;
 }
@@ -259,6 +260,7 @@ function buildTrees(scene) {
     mesh.setMatrixAt(placed, dummy.matrix);
     placed++;
   }
+  mesh.castShadow = true;
   scene.add(mesh);
 }
 
@@ -271,6 +273,7 @@ function buildLandingPad(scene, x, z) {
     new THREE.CylinderGeometry(46, 50, 6, 24),
     new THREE.MeshStandardMaterial({ color: 0xcbb8d9, roughness: 0.9 })
   );
+  base.receiveShadow = true;
   group.add(base);
 
   const ring = new THREE.Mesh(
@@ -372,13 +375,36 @@ export function buildStaticWorld(scene) {
   scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xffe2f0, 1.5);
   sun.position.set(-600, 800, 300);
-  sun.castShadow = false;
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.4;
+  // Frustum stays tight (not sized to the whole 3600-unit world) since
+  // updateSunShadow() below re-centers it on the dragon every frame.
+  const SHADOW_HALF = 260;
+  sun.shadow.camera.left = -SHADOW_HALF;
+  sun.shadow.camera.right = SHADOW_HALF;
+  sun.shadow.camera.top = SHADOW_HALF;
+  sun.shadow.camera.bottom = -SHADOW_HALF;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 2000;
   scene.add(sun);
+  scene.add(sun.target);
   const rim = new THREE.DirectionalLight(0xb08fff, 0.4);
   rim.position.set(500, 200, -600);
   scene.add(rim);
 
   return { terrain, spire, landingPad, sparkles, sky, ambient, sun, rim, worldSize: WORLD_SIZE };
+}
+
+// Keeps the sun's shadow frustum tight and centered on the player by
+// translating the light and its target together each frame (same offset,
+// so the light direction/angle never changes) rather than sizing the
+// frustum to the whole world, which would tank shadow resolution.
+const SUN_OFFSET = new THREE.Vector3(-600, 800, 300);
+export function updateSunShadow(sun, targetPos) {
+  sun.position.copy(targetPos).add(SUN_OFFSET);
+  sun.target.position.copy(targetPos);
 }
 
 // Builds the beacons for the chosen difficulty. Called once the player picks a mode.
