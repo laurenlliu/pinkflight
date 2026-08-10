@@ -21,12 +21,18 @@ import { buildGems, updateGems, removeGems } from './gems.js';
 const app = document.getElementById('app');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+// Capped at 1.5 rather than the device's true ratio (often 2 on laptops) — a
+// retina-res 3D scene with post-processing is expensive, and the resolution
+// gain past 1.5x is much less visible than the frame-rate cost of getting it.
+renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
-renderer.shadowMap.enabled = true;
+// Shadows start OFF — they're the priciest effect, and a slow first
+// impression is worse than a plain one. The adaptive check below turns them
+// on only for devices that prove they have headroom to spare.
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 app.appendChild(renderer.domElement);
 
@@ -368,15 +374,16 @@ let prevLitCount = 0;
 let prevBoost = false;
 let prevStorming = false;
 
-// Adaptive quality: shadows and bloom are the priciest effects, and device
-// GPUs vary wildly (integrated laptop chips vs. discrete desktops). Rather
-// than pick one fixed setting, sample real frame time during actual gameplay
-// and drop the expensive effects if the device can't keep up — checked once,
-// a few seconds in, so startup jank doesn't trigger a false downgrade.
+// Adaptive quality: device GPUs vary wildly (integrated laptop chips vs.
+// discrete desktops), so rather than pick one fixed setting, sample real
+// frame time a couple seconds into actual gameplay. Shadows start off and
+// bloom starts on (see renderer setup above); this check only ever adds
+// shadows back for devices with clear headroom, and drops bloom too on
+// devices that are still struggling with just the baseline scene.
 let perfCheckStart = null;
 let perfFrames = 0;
 let perfChecked = false;
-const PERF_SAMPLE_SECONDS = 3;
+const PERF_SAMPLE_SECONDS = 2;
 
 function frame() {
   requestAnimationFrame(frame);
@@ -391,8 +398,8 @@ function frame() {
     if (elapsedMs > PERF_SAMPLE_SECONDS * 1000) {
       perfChecked = true;
       const avgFps = (perfFrames / elapsedMs) * 1000;
-      if (avgFps < 45) bloomPass.enabled = false;
-      if (avgFps < 30) renderer.shadowMap.enabled = false;
+      if (avgFps >= 55) renderer.shadowMap.enabled = true;
+      if (avgFps < 40) bloomPass.enabled = false;
     }
   }
 
