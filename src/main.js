@@ -29,6 +29,7 @@ const dragon = new Dragon(scene, getSkin(savedSkinId));
 dragon.position.set(0, heightAt(0, 140) + GROUND_CLEARANCE, 140);
 dragon.isLanded = true;
 dragon.yaw = Math.PI;
+dragon.syncTransform();
 
 const controls = new Controls();
 const fire = new FireBreath(scene);
@@ -128,8 +129,94 @@ function updateCamera(dt, shakeTarget) {
   camera.lookAt(camLookTarget);
 }
 
+// "Character select" camera: slowly orbits the dragon on the start screen so
+// its skin color is clearly visible from every angle, well clear of the
+// dark overlay's center where the title/controls text sits.
+let showcaseAngle = 0;
+function updateShowcaseCamera(dt) {
+  showcaseAngle += dt * 0.22;
+  const dragonPos = dragon.group.position;
+  const radius = 58;
+  const camPos3 = new THREE.Vector3(
+    dragonPos.x + Math.sin(showcaseAngle) * radius,
+    dragonPos.y + 30,
+    dragonPos.z + Math.cos(showcaseAngle) * radius
+  );
+  const lookTarget = new THREE.Vector3(dragonPos.x, dragonPos.y + 8, dragonPos.z);
+  // Aim well past the dragon (not straight at it) so it renders in the clear
+  // right-hand zone of the screen (see #startOverlay CSS), not hidden behind
+  // the left-aligned title/flavor/controls text.
+  const forward = lookTarget.clone().sub(camPos3).normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  lookTarget.addScaledVector(right, -20);
+  camera.position.copy(camPos3);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(lookTarget);
+}
+
+// Projects a world-space objective into screen space so the HUD can show
+// either a glowing ring right on top of it (when it's actually in view) or a
+// big arrow clamped to the screen edge pointing toward it (when it's not) —
+// tied to the real camera transform, unlike a dragon-heading-based compass.
+const _ndc = new THREE.Vector3();
+const _viewSpace = new THREE.Vector3();
+function updateWaypoint(targetPos, label) {
+  if (!targetPos) { ui.setWaypoint(null); return; }
+
+  const dist = camera.position.distanceTo(targetPos);
+  _viewSpace.copy(targetPos).applyMatrix4(camera.matrixWorldInverse);
+  const inFront = _viewSpace.z < 0;
+
+  _ndc.copy(targetPos).project(camera);
+  const onScreen = inFront && Math.abs(_ndc.x) <= 0.92 && Math.abs(_ndc.y) <= 0.92;
+
+  const w = window.innerWidth, h = window.innerHeight;
+  let x, y, angleDeg = 0;
+  if (onScreen) {
+    x = (_ndc.x * 0.5 + 0.5) * w;
+    y = (1 - (_ndc.y * 0.5 + 0.5)) * h;
+  } else {
+    let dx = _ndc.x, dy = _ndc.y;
+    if (!inFront) { dx = -dx; dy = -dy; } // flip: projecting a behind-camera point mirrors it
+    if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) dx = 1e-4;
+    angleDeg = Math.atan2(dx, dy) * (180 / Math.PI);
+
+    const margin = 56;
+    const halfW = w / 2 - margin, halfH = h / 2 - margin;
+    const pxDirX = dx * (w / 2), pxDirY = -dy * (h / 2);
+    const len = Math.hypot(pxDirX, pxDirY) || 1e-6;
+    const nx = pxDirX / len, ny = pxDirY / len;
+    const scale = Math.min(halfW / (Math.abs(nx) || 1e-6), halfH / (Math.abs(ny) || 1e-6));
+    x = w / 2 + nx * scale;
+    y = h / 2 + ny * scale;
+  }
+
+  ui.setWaypoint({ x, y, onScreen, angleDeg, distance: Math.round(dist), label });
+}
+
+const showcaseLight = new THREE.PointLight(0xfff4ea, 0, 220, 1.4);
+scene.add(showcaseLight);
+function updateShowcaseLight(dt, active) {
+  showcaseLight.position.set(dragon.group.position.x, dragon.group.position.y + 35, dragon.group.position.z + 30);
+  const target = active ? 3.4 : 0;
+  showcaseLight.intensity = THREE.MathUtils.lerp(showcaseLight.intensity, target, 1 - Math.pow(0.01, dt));
+}
+
 function litCount() {
   return beacons.filter((b) => b.lit).length;
+}
+
+// Nearest unlit beacon, or the Blossom Ring once every beacon is lit.
+function currentObjective() {
+  const unlit = beacons.filter((b) => !b.lit);
+  if (unlit.length === 0) return { pos: world.landingPad.position, label: 'Blossom Ring' };
+  let nearest = unlit[0];
+  let nearestDist = Infinity;
+  for (const b of unlit) {
+    const d = dragon.position.distanceTo(b.position);
+    if (d < nearestDist) { nearestDist = d; nearest = b; }
+  }
+  return { pos: nearest.position, label: 'Wishlight' };
 }
 
 function checkWin(state) {
@@ -209,10 +296,13 @@ function frame() {
       }
       const elapsedStr = formatTime((performance.now() - startTime) / 1000);
       const nextRing = raceRings[raceIndex];
-      ui.updateRaceHUD(state, raceIndex, raceRings.length, elapsedStr, dragon, nextRing ? nextRing.position : null);
+      ui.updateRaceHUD(state, raceIndex, raceRings.length, elapsedStr);
+      updateWaypoint(nextRing ? nextRing.position : null, 'Next Ring');
     } else {
       fire.update(dt, dragon, beacons, firing);
-      ui.update(state, litCount(), beacons.length, dragon, beacons, world.landingPad);
+      ui.update(state, litCount(), beacons.length);
+      const objective = currentObjective();
+      updateWaypoint(objective.pos, objective.label);
       checkWin(state);
 
       const lit = litCount();
@@ -236,8 +326,16 @@ function frame() {
     const shakeTarget = (firing ? 0.35 : 0) + (controls.state.boost && state.speed > 5 ? 0.45 : 0)
       + hitShake + weatherState.stormIntensity * 0.5;
     updateCamera(dt, shakeTarget);
+    updateShowcaseLight(dt, false);
+  } else if (!started) {
+    dragon.syncTransform();
+    updateShowcaseCamera(dt);
+    updateShowcaseLight(dt, true);
+    ui.setWaypoint(null);
   } else {
     updateCamera(dt, weatherState.stormIntensity * 0.3);
+    updateShowcaseLight(dt, false);
+    ui.setWaypoint(null);
   }
 
   renderer.render(scene, camera);

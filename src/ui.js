@@ -31,16 +31,34 @@ const STYLE = `
 
   #reticle { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 10px; height: 10px; border: 2px solid rgba(255,214,240,0.7); border-radius: 50%; opacity: 0.6; }
 
-  #compass { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  #compassArrow { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 18px solid #ffd166; filter: drop-shadow(0 2px 4px rgba(60,10,50,0.8)); transition: transform 0.15s ease-out; }
-  #compassLabel { font-size: 12px; letter-spacing: 1px; opacity: 0.9; font-weight: 600; }
+  /* Waypoint marker: a big clear arrow clamped to the screen edge pointing at
+     the objective when it's off-screen, or a glowing reticle sitting right on
+     top of it in the 3D world when it's in view. Much more legible than a
+     tiny rotating compass triangle. */
+  #waypoint { position: absolute; display: none; align-items: center; justify-content: center; flex-direction: column; transform: translate(-50%, -50%); transition: left 0.1s linear, top 0.1s linear; }
+  #waypoint.show { display: flex; }
+  #waypointArrow { width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 26px solid #ffd166; filter: drop-shadow(0 2px 6px rgba(60,10,50,0.9)) drop-shadow(0 0 10px rgba(255,209,102,0.6)); }
+  #waypointRing { display: none; width: 30px; height: 30px; border-radius: 50%; border: 3px solid #ffd166; box-shadow: 0 0 14px rgba(255,209,102,0.8), inset 0 0 8px rgba(255,209,102,0.5); }
+  #waypoint.onscreen #waypointArrow { display: none; }
+  #waypoint.onscreen #waypointRing { display: block; }
+  #waypointLabel { margin-top: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; text-shadow: 0 2px 6px rgba(60,10,50,0.9), 0 0 10px rgba(60,10,50,0.7); color: #ffe9c2; }
 
   #hitFlash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(176,111,224,0) 40%, rgba(176,111,224,0.35) 100%); opacity: 0; transition: opacity 0.15s; }
   #hitFlash.show { opacity: 1; }
 
-  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(ellipse at center, rgba(90,40,110,0.75), rgba(20,8,30,0.96)); z-index: 10; text-align: center; padding: 20px; pointer-events: all; font-family: 'Baloo 2', 'Trebuchet MS', sans-serif; overflow-y: auto; }
-  .overlay h1 { font-size: clamp(32px, 6vw, 64px); letter-spacing: 4px; font-weight: 800; color: #ffe3f5; text-shadow: 0 0 30px rgba(255,111,176,0.7), 0 0 60px rgba(176,111,224,0.5); margin: 0 0 6px; }
-  .overlay .flavor { color: #f0d9ee; opacity: 0.9; font-size: 15px; max-width: 560px; margin-bottom: 22px; line-height: 1.55; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(ellipse at center, rgba(70,30,90,0.42), rgba(15,6,24,0.72)); z-index: 10; text-align: center; padding: 20px; pointer-events: all; font-family: 'Baloo 2', 'Trebuchet MS', sans-serif; overflow-y: auto; }
+  .overlay h1 { font-size: clamp(32px, 6vw, 64px); letter-spacing: 4px; font-weight: 800; color: #ffe3f5; text-shadow: 0 0 30px rgba(255,111,176,0.9), 0 0 60px rgba(176,111,224,0.7), 0 2px 10px rgba(10,4,16,0.8); margin: 0 0 6px; }
+  .overlay .flavor { color: #f0d9ee; opacity: 0.95; font-size: 15px; max-width: 560px; margin-bottom: 22px; line-height: 1.55; text-shadow: 0 1px 6px rgba(10,4,16,0.9), 0 0 16px rgba(10,4,16,0.6); }
+
+  /* Start screen content hugs the left ~55% so the dragon showcase (camera
+     framed to the right, see updateShowcaseCamera) has clear space to its
+     right instead of sitting directly behind the text. */
+  #startOverlay { align-items: flex-start; justify-content: flex-start; padding-top: 4vh; padding-bottom: 4vh; }
+  #startOverlay .startContent { max-width: 480px; width: 100%; padding-left: 4vw; box-sizing: border-box; }
+  @media (max-width: 640px) {
+    #startOverlay { align-items: center; }
+    #startOverlay .startContent { padding-left: 0; max-width: 100%; }
+  }
   .overlay .controls { display: grid; grid-template-columns: auto auto; gap: 6px 18px; text-align: left; color: #fff0f8; font-size: 14px; margin-bottom: 26px; background: rgba(80,30,90,0.3); padding: 16px 22px; border-radius: 14px; border: 1px solid rgba(255,214,240,0.3); }
   .overlay .controls b { color: #ffd166; }
   .overlay .touchHint { font-size: 13px; opacity: 0.75; margin-top: -14px; margin-bottom: 22px; }
@@ -94,10 +112,11 @@ export class UI {
       <div id="objective" class="panel-text">
         <div class="title">Pinkflight</div>
         <div class="goal">Light the <span id="beaconCount">0 / 4</span> wishlights, then glide home to the Blossom Ring</div>
-        <div id="compass">
-          <div id="compassArrow"></div>
-          <div id="compassLabel"></div>
-        </div>
+      </div>
+      <div id="waypoint" class="panel-text">
+        <div id="waypointArrow"></div>
+        <div id="waypointRing"></div>
+        <div id="waypointLabel"></div>
       </div>
       <div id="reticle"></div>
       <div id="promptCenter" class="panel-text"></div>
@@ -127,8 +146,8 @@ export class UI {
       altFill: hud.querySelector('#altFill'),
       staminaFill: hud.querySelector('#staminaFill'),
       fireFill: hud.querySelector('#fireFill'),
-      compassArrow: hud.querySelector('#compassArrow'),
-      compassLabel: hud.querySelector('#compassLabel'),
+      waypoint: hud.querySelector('#waypoint'),
+      waypointLabel: hud.querySelector('#waypointLabel'),
       hitFlash: hud.querySelector('#hitFlash'),
       weatherPrompt: hud.querySelector('#weatherPrompt'),
     };
@@ -185,34 +204,36 @@ export class UI {
     el.id = 'startOverlay';
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     el.innerHTML = `
-      <h1>PINKFLIGHT</h1>
-      <div class="flavor">Somewhere above the Bloomlands, a little dragon dreams of the open sky. Scattered across the hills are wishlights, each waiting for a spark of courage to set it glowing. Find them, light them with your flame, then glide home to the Blossom Ring before the stars come out.</div>
-      ${isTouch ? '' : `<div class="controls">
-        <div><b>W / S</b></div><div>Climb / Dive</div>
-        <div><b>A / D</b></div><div>Turn Left / Right</div>
-        <div><b>Space</b></div><div>Flap (lift boost / take off)</div>
-        <div><b>Shift</b></div><div>Speed boost</div>
-        <div><b>F</b></div><div>Breathe fire</div>
-      </div>`}
-      ${isTouch ? '<div class="touchHint">Joystick to steer · FLAP to lift off · hold 🔥 to breathe fire</div>' : ''}
-      <div class="skinPickerWrap">
-        <div class="skinPickerLabel">Choose your dragon</div>
-        <div id="skinPicker" class="skinPicker"></div>
-        <div id="skinName"></div>
-      </div>
-      <div class="modeRow">
-        <button class="modeBtn easy" data-mode="easy">
-          <span>🌸 Easy Skies</span>
-          <span class="sub">4 wishlights · calm skies</span>
-        </button>
-        <button class="modeBtn hard" data-mode="hard">
-          <span>⚡ Hard Skies</span>
-          <span class="sub">8 wishlights · mischievous Storm Sprites</span>
-        </button>
-        <button class="modeBtn race" data-mode="race">
-          <span>🏁 Ring Race</span>
-          <span class="sub" id="raceBestSub">10 rings · beat the clock</span>
-        </button>
+      <div class="startContent">
+        <h1>PINKFLIGHT</h1>
+        <div class="flavor">Somewhere above the Bloomlands, a little dragon dreams of the open sky. Scattered across the hills are wishlights, each waiting for a spark of courage to set it glowing. Find them, light them with your flame, then glide home to the Blossom Ring before the stars come out.</div>
+        ${isTouch ? '' : `<div class="controls">
+          <div><b>W / S</b></div><div>Climb / Dive</div>
+          <div><b>A / D</b></div><div>Turn Left / Right</div>
+          <div><b>Space</b></div><div>Flap (lift boost / take off)</div>
+          <div><b>Shift</b></div><div>Speed boost</div>
+          <div><b>F</b></div><div>Breathe fire</div>
+        </div>`}
+        ${isTouch ? '<div class="touchHint">Joystick to steer · FLAP to lift off · hold 🔥 to breathe fire</div>' : ''}
+        <div class="skinPickerWrap">
+          <div class="skinPickerLabel">Choose your dragon — see it live on the right →</div>
+          <div id="skinPicker" class="skinPicker"></div>
+          <div id="skinName"></div>
+        </div>
+        <div class="modeRow">
+          <button class="modeBtn easy" data-mode="easy">
+            <span>🌸 Easy Skies</span>
+            <span class="sub">4 wishlights · calm skies</span>
+          </button>
+          <button class="modeBtn hard" data-mode="hard">
+            <span>⚡ Hard Skies</span>
+            <span class="sub">8 wishlights · mischievous Storm Sprites</span>
+          </button>
+          <button class="modeBtn race" data-mode="race">
+            <span>🏁 Ring Race</span>
+            <span class="sub" id="raceBestSub">10 rings · beat the clock</span>
+          </button>
+        </div>
       </div>
     `;
     return el;
@@ -376,7 +397,7 @@ export class UI {
     this._weatherPromptTimeout = setTimeout(() => this.els.weatherPrompt.classList.remove('show'), 4000);
   }
 
-  update(state, litCount, totalBeacons, dragon, beacons, landingPad) {
+  update(state, litCount, totalBeacons) {
     this.els.beaconCount.textContent = `${litCount} / ${totalBeacons}`;
     const speedPct = Math.min(100, (state.speed / 96) * 100);
     const altPct = Math.min(100, (state.altitude / 500) * 100);
@@ -390,39 +411,25 @@ export class UI {
     } else {
       this.setPrompt('');
     }
-
-    if (dragon && beacons) {
-      const allLit = litCount === totalBeacons;
-      let targetPos, label;
-      if (allLit) {
-        targetPos = landingPad.position;
-        label = 'Blossom Ring';
-      } else {
-        const unlit = beacons.filter((b) => !b.lit);
-        let nearest = unlit[0];
-        let nearestDist = Infinity;
-        for (const b of unlit) {
-          const d = dragon.position.distanceTo(b.position);
-          if (d < nearestDist) { nearestDist = d; nearest = b; }
-        }
-        targetPos = nearest.position;
-        label = 'Wishlight';
-      }
-      this._pointCompassAt(dragon, targetPos, label);
-    }
   }
 
-  _pointCompassAt(dragon, targetPos, label) {
-    const dx = targetPos.x - dragon.position.x;
-    const dz = targetPos.z - dragon.position.z;
-    const dist = Math.hypot(dx, dz);
-    const desiredYaw = Math.atan2(-dx, -dz);
-    let bearing = desiredYaw - dragon.yaw;
-    bearing = Math.atan2(Math.sin(bearing), Math.cos(bearing));
-    const deg = -bearing * (180 / Math.PI);
-
-    this.els.compassArrow.style.transform = `rotate(${deg}deg)`;
-    this.els.compassLabel.textContent = `${label} · ${Math.round(dist)}m`;
+  // Positions the waypoint marker from an already-computed screen-space result
+  // (see main.js's updateWaypoint, which does the camera projection). Either a
+  // glowing ring sitting right on the target in the 3D view (onScreen) or a
+  // big arrow clamped to the screen edge pointing toward it (off-screen).
+  setWaypoint(info) {
+    if (!info) {
+      this.els.waypoint.classList.remove('show');
+      return;
+    }
+    this.els.waypoint.classList.add('show');
+    this.els.waypoint.classList.toggle('onscreen', info.onScreen);
+    this.els.waypoint.style.left = `${info.x}px`;
+    this.els.waypoint.style.top = `${info.y}px`;
+    if (!info.onScreen) {
+      this.els.waypoint.querySelector('#waypointArrow').style.transform = `rotate(${info.angleDeg}deg)`;
+    }
+    this.els.waypointLabel.textContent = `${info.label} · ${info.distance}m`;
   }
 
   // --- Ring race mode ---
@@ -433,7 +440,7 @@ export class UI {
     this.els.raceTimer = document.getElementById('raceTimer');
   }
 
-  updateRaceHUD(state, ringIndex, totalRings, elapsedStr, dragon, nextRingPos) {
+  updateRaceHUD(state, ringIndex, totalRings, elapsedStr) {
     if (this.els.ringCount) this.els.ringCount.textContent = `${Math.min(ringIndex, totalRings)} / ${totalRings}`;
     if (this.els.raceTimer) this.els.raceTimer.textContent = elapsedStr;
 
@@ -448,8 +455,6 @@ export class UI {
     } else {
       this.setPrompt('');
     }
-
-    if (nextRingPos) this._pointCompassAt(dragon, nextRingPos, 'Next Ring');
   }
 
   onRaceRestart(cb) {

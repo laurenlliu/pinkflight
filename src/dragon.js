@@ -417,6 +417,19 @@ export class Dragon {
     this.group.position.copy(this.position);
   }
 
+  // Immediately snaps group.position/quaternion to match the logical state —
+  // no smoothing. update() (which does the smoothed version above) only runs
+  // during actual gameplay, so without this the visible mesh sits wherever
+  // the group was left (world origin, by default) until the player takes
+  // off, even though `position`/`yaw` already say otherwise (e.g. spawned on
+  // the landing pad). Call once after positioning the dragon, and every
+  // frame while idle so camera code relying on group.position stays correct.
+  syncTransform() {
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch, this.yaw, this.roll, 'YXZ'));
+    this.group.quaternion.copy(q);
+    this.group.position.copy(this.position);
+  }
+
   _animate(dt, speed) {
     const flapRate = this.isLanded ? 0 : THREE.MathUtils.clamp(0.9 + speed * 0.045, 0.9, 3.2);
     this._flapPhase += dt * flapRate * Math.PI * 2;
