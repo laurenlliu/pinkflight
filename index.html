@@ -9,9 +9,41 @@
       html, body { margin: 0; padding: 0; overflow: hidden; background: #05060a; }
       #app { position: relative; width: 100vw; height: 100vh; }
       canvas { display: block; touch-action: none; }
+
+      /* Loading splash — inline so it paints immediately, before any JS
+         (including the Vite module graph and the Google Font fetch) has run.
+         main.js fades #loading out and removes it once the scene is ready. */
+      #loading {
+        position: fixed; inset: 0; z-index: 100;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(ellipse at center, #4a2f7a 0%, #1a0f2e 75%);
+        font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+        transition: opacity 0.5s ease;
+      }
+      #loading.hide { opacity: 0; pointer-events: none; }
+      #loading h1 {
+        margin: 0 0 22px; font-size: clamp(28px, 6vw, 48px); letter-spacing: 4px; font-weight: 800;
+        color: #ffe3f5; text-shadow: 0 0 30px rgba(255,111,176,0.8), 0 0 60px rgba(176,111,224,0.6);
+      }
+      #loadingBar { width: 200px; height: 8px; border-radius: 5px; background: rgba(255,255,255,0.15); overflow: hidden; }
+      #loadingBar::after {
+        content: ''; display: block; width: 40%; height: 100%; border-radius: 5px;
+        background: linear-gradient(90deg, #ff6fb0, #ffd166);
+        animation: loadSweep 1.1s ease-in-out infinite;
+      }
+      #loadingHint { margin-top: 16px; font-size: 13px; letter-spacing: 1px; color: #d9c2e8; opacity: 0.8; }
+      @keyframes loadSweep {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(350%); }
+      }
     </style>
   </head>
   <body>
+    <div id="loading">
+      <h1>PINKFLIGHT</h1>
+      <div id="loadingBar"></div>
+      <div id="loadingHint">Waking the dragon…</div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
