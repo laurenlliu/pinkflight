@@ -11,6 +11,8 @@ import { createWeather } from './weather.js';
 import { DRAGON_SKINS, getSkin, loadSavedSkinId, saveSkinId } from './skins.js';
 import { isUnlocked, updateProgress, getProgress } from './progress.js';
 import { spawnBoss, updateBoss, removeBoss, bossTelegraphActive, BURST_RADIUS, BURST_FORCE } from './boss.js';
+import { loadSettings, saveSettings } from './settings.js';
+import { buildGems, updateGems, removeGems } from './gems.js';
 
 const app = document.getElementById('app');
 
@@ -57,13 +59,25 @@ function reportProgress(patch) {
 }
 const weather = createWeather(world, scene);
 
+const settings = loadSettings();
+ui.bindVolumeSliders(
+  settings.musicVolume, settings.sfxVolume,
+  (v) => { sound.setMusicVolume(v); saveSettings({ musicVolume: v }); },
+  (v) => { sound.setSfxVolume(v); saveSettings({ sfxVolume: v }); }
+);
+
 const bestTime = getBestTime();
 if (bestTime !== null) ui.setRaceBestHint(`10 rings · best ${formatTime(bestTime)}`);
 
 let totalSpritesScared = getProgress().spritesScared;
+let totalGemsCollected = getProgress().gemsCollected;
+let bestGemsInFlightSoFar = getProgress().bestGemsInFlight;
+let totalFlightsCompleted = getProgress().flightsCompleted;
 let mode = null;
 let beacons = [];
 let enemies = [];
+let gems = [];
+let sessionGems = 0;
 let raceRings = [];
 let raceIndex = 0;
 let raceActive = false;
@@ -86,12 +100,18 @@ function beginFlight(chosenMode) {
   } else {
     beacons = buildBeacons(scene, mode);
     enemies = createEnemies(scene, mode);
+    gems = buildGems(scene, heightAt);
     ui.setGoalText(beacons.length);
+    ui.showGemCounter();
+    ui.updateGemCount(0);
   }
 
   ui.hideStart();
+  ui.showPauseButton();
   startTime = performance.now();
   sound.unlock();
+  sound.setMusicVolume(settings.musicVolume);
+  sound.setSfxVolume(settings.sfxVolume);
   sound.playTakeoff();
 }
 
@@ -107,6 +127,31 @@ ui.onRaceRestart(() => {
   sound.unlock();
   sound.playUIClick();
   window.location.reload();
+});
+
+// --- Pause ---
+let paused = false;
+function togglePause() {
+  if (!started || gameWon || raceFinished) return;
+  paused = !paused;
+  if (paused) ui.showPause(); else ui.hidePause();
+}
+ui.onPauseButtonClick(togglePause);
+ui.onResume(togglePause);
+ui.onQuit(() => window.location.reload());
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') togglePause();
+});
+
+// --- Stats screen ---
+ui.onOpenStats(() => {
+  sound.unlock();
+  sound.playUIClick();
+  ui.showStats(getProgress(), DRAGON_SKINS);
+});
+ui.onCloseStats(() => {
+  sound.playUIClick();
+  ui.hideStats();
 });
 
 // --- Camera rig ---
@@ -249,8 +294,10 @@ function checkWin(state, isStorm) {
       const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
       const s = Math.floor(elapsed % 60).toString().padStart(2, '0');
       ui.showWin(`${m}:${s}`);
+      ui.hidePauseButton();
       sound.playWin();
-      const patch = { completedEasy: true };
+      totalFlightsCompleted += 1;
+      const patch = { completedEasy: true, flightsCompleted: totalFlightsCompleted };
       if (isStorm) patch.stormCompletion = true;
       reportProgress(patch);
     }
@@ -264,8 +311,10 @@ function finishRace() {
   const isNewBest = maybeSaveBestTime(elapsed);
   const best = getBestTime();
   ui.showRaceResult(formatTime(elapsed), isNewBest, best !== null ? formatTime(best) : '');
+  ui.hidePauseButton();
   sound.playWin();
-  reportProgress({ completedRace: true, bestRaceTime: getBestTime() });
+  totalFlightsCompleted += 1;
+  reportProgress({ completedRace: true, bestRaceTime: getBestTime(), flightsCompleted: totalFlightsCompleted });
 }
 
 // Loading splash lives in index.html so it paints before any JS runs; hide it
@@ -294,6 +343,7 @@ let prevStorming = false;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
+  if (paused) { renderer.render(scene, camera); return; }
   elapsedTime += dt;
 
   const weatherState = weather.update(dt, sound);
@@ -346,6 +396,16 @@ function frame() {
       const lit = litCount();
       if (lit > prevLitCount) sound.playIgnite();
       prevLitCount = lit;
+
+      const newGems = updateGems(dt, gems, dragon.position);
+      if (newGems > 0) {
+        sessionGems += newGems;
+        totalGemsCollected += newGems;
+        bestGemsInFlightSoFar = Math.max(bestGemsInFlightSoFar, sessionGems);
+        sound.playGem();
+        ui.updateGemCount(sessionGems);
+        reportProgress({ gemsCollected: totalGemsCollected, bestGemsInFlight: bestGemsInFlightSoFar });
+      }
 
       if (enemies.length > 0) {
         const hit = updateEnemies(dt, enemies, dragon);
@@ -400,8 +460,10 @@ function frame() {
           const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
           const s = Math.floor(elapsed % 60).toString().padStart(2, '0');
           ui.showWin(`${m}:${s}`);
+          ui.hidePauseButton();
           sound.playWin();
-          reportProgress({ completedHard: true, stormCompletion: true });
+          totalFlightsCompleted += 1;
+          reportProgress({ completedHard: true, stormCompletion: true, flightsCompleted: totalFlightsCompleted });
           const defeatedBoss = boss;
           setTimeout(() => removeBoss(scene, defeatedBoss), 1400);
         }
@@ -453,6 +515,8 @@ if (import.meta.env.DEV) {
     get raceRings() { return raceRings; },
     get raceIndex() { return raceIndex; },
     get boss() { return boss; },
+    get gems() { return gems; },
+    get sessionGems() { return sessionGems; },
     updateBoss,
     get mode() { return mode; },
     get gameWon() { return gameWon; },

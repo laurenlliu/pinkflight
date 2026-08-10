@@ -14,12 +14,31 @@ export class SoundEngine {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.55;
+    this.master.gain.value = 1;
     this.master.connect(this.ctx.destination);
+
+    // Separate buses so music/SFX volume can be controlled independently —
+    // everything except the music engine routes through sfxBus.
+    this.sfxBus = this.ctx.createGain();
+    this._sfxBaseline = 0.55;
+    this.sfxBus.gain.value = this._sfxBaseline;
+    this.sfxBus.connect(this.master);
+    this._musicVolumeScale = 1;
+
     this._buildWind();
     this._buildFire();
     this._buildMusic();
     if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  setSfxVolume(v) {
+    this._sfxVolumeScale = v;
+    if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(this._sfxBaseline * v, this.ctx.currentTime, 0.08);
+  }
+
+  setMusicVolume(v) {
+    this._musicVolumeScale = v;
+    if (this._musicBus) this._musicBus.gain.setTargetAtTime(0.2 * v, this.ctx.currentTime, 0.08);
   }
 
   // --- Generative ambient music: no fixed loop, just an ever-evolving pad +
@@ -121,7 +140,7 @@ export class SoundEngine {
     gain.gain.value = 0;
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.sfxBus);
     src.start();
     this._wind = { src, filter, gain };
   }
@@ -139,7 +158,7 @@ export class SoundEngine {
     gain.gain.value = 0;
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.sfxBus);
     src.start();
     this._fire = { src, filter, gain, jitterT: 0 };
   }
@@ -166,7 +185,7 @@ export class SoundEngine {
 
     // Duck the music bed under thunder/wind during a storm.
     if (this._musicBus) {
-      const target = 0.2 * (1 - stormIntensity * 0.55);
+      const target = 0.2 * this._musicVolumeScale * (1 - stormIntensity * 0.55);
       this._musicBus.gain.setTargetAtTime(target, now, 1.5);
     }
   }
@@ -185,7 +204,7 @@ export class SoundEngine {
     g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain * 0.4), t0 + attack + decay);
     g.gain.linearRampToValueAtTime(0, t0 + attack + decay + sustain);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     osc.start(t0);
     osc.stop(t0 + attack + decay + sustain + 0.05);
   }
@@ -205,6 +224,13 @@ export class SoundEngine {
     this._envTone(1568, { type: 'sine', attack: 0.002, decay: 0.12, gain: 0.14, delay: 0.03 });
   }
 
+  playGem() {
+    if (!this.unlocked) return;
+    // Quick sparkly two-note pluck, softer/higher than the ring-race blip.
+    this._envTone(1318.5, { type: 'triangle', attack: 0.002, decay: 0.09, gain: 0.16 });
+    this._envTone(1975.5, { type: 'sine', attack: 0.002, decay: 0.14, gain: 0.12, delay: 0.04 });
+  }
+
   playThunder() {
     if (!this.unlocked) return;
     const ctx = this.ctx;
@@ -221,7 +247,7 @@ export class SoundEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.6);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     src.start(t0);
   }
 
@@ -242,7 +268,7 @@ export class SoundEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.65);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     src.start(t0);
     this._envTone(110, { type: 'sawtooth', attack: 0.01, decay: 0.3, gain: 0.2 });
   }
@@ -259,7 +285,7 @@ export class SoundEngine {
     g.gain.setValueAtTime(0.22, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     osc.start(t0);
     osc.stop(t0 + 0.22);
   }
@@ -276,7 +302,7 @@ export class SoundEngine {
     g.gain.setValueAtTime(0.18, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     osc.start(t0);
     osc.stop(t0 + 0.27);
   }
@@ -293,7 +319,7 @@ export class SoundEngine {
     g.gain.setValueAtTime(0.3, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.4);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     osc.start(t0);
     osc.stop(t0 + 0.45);
   }
@@ -312,7 +338,7 @@ export class SoundEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     src.start(t0);
     this._envTone(110, { type: 'sine', attack: 0.005, decay: 0.2, gain: 0.2 });
   }
@@ -333,7 +359,7 @@ export class SoundEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.45);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxBus);
     src.start(t0);
   }
 

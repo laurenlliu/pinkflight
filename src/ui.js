@@ -24,6 +24,11 @@ const STYLE = `
   #bossIntro h2 { margin: 0; font-size: clamp(28px, 5vw, 48px); letter-spacing: 3px; font-weight: 800; color: #e8c9ff; text-shadow: 0 0 30px rgba(176,111,224,0.9), 0 0 60px rgba(255,111,196,0.6); }
   #bossIntro p { margin: 8px 0 0; font-size: 15px; color: #f0d9ee; opacity: 0.9; }
 
+  #gemCounter { position: absolute; top: 20px; left: 20px; display: none; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; color: #ffe9c2; background: rgba(80,30,90,0.4); border: 2px solid rgba(255,214,240,0.35); border-radius: 20px; padding: 6px 16px 6px 10px; }
+  #gemCounter.show { display: flex; }
+  #gemCounter .icon { font-size: 18px; transition: transform 0.15s ease; }
+  #gemCounter.pulse .icon { transform: scale(1.4) rotate(20deg); }
+
   #bars { position: absolute; left: 26px; bottom: 26px; width: 220px; }
   .bar-row { margin-bottom: 10px; }
   .bar-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.85; margin-bottom: 3px; font-weight: 600; }
@@ -105,7 +110,29 @@ const STYLE = `
 
   .overlay button.primary { pointer-events: all; cursor: pointer; background: linear-gradient(180deg,#ffd166,#ff9f5a); border: none; color: #3a1608; font-weight: 800; font-size: 17px; letter-spacing: 1px; padding: 14px 38px; border-radius: 12px; text-transform: uppercase; box-shadow: 0 6px 18px rgba(30,8,40,0.5); font-family: inherit; }
   .overlay button.primary:hover { filter: brightness(1.08); }
+  .overlay button.secondary { pointer-events: all; cursor: pointer; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,214,240,0.4); color: #fff0f8; font-weight: 700; font-size: 15px; letter-spacing: 1px; padding: 12px 30px; border-radius: 12px; font-family: inherit; }
+  .overlay button.secondary:hover { background: rgba(255,255,255,0.2); }
   .hidden { display: none !important; }
+
+  #pauseBtn { position: absolute; top: 20px; right: 20px; pointer-events: all; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(255,214,240,0.4); background: rgba(80,30,90,0.45); color: #fff0f8; font-size: 16px; display: none; align-items: center; justify-content: center; }
+  #pauseBtn:hover { background: rgba(80,30,90,0.7); }
+
+  .sliderRow { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; text-align: left; }
+  .sliderRow label { width: 90px; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; opacity: 0.85; }
+  .sliderRow input[type="range"] { pointer-events: all; flex: 1; accent-color: #ff6fb0; height: 6px; }
+  .sliderRow .sliderVal { width: 36px; font-size: 13px; opacity: 0.75; text-align: right; }
+  .pauseButtons { display: flex; gap: 14px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+
+  .statsBtnLink { pointer-events: all; cursor: pointer; background: none; border: none; color: #f0d9ee; opacity: 0.8; font-family: inherit; font-size: 13px; letter-spacing: 1px; text-decoration: underline; margin-top: 6px; }
+  .statsBtnLink:hover { opacity: 1; }
+  #statsOverlay { z-index: 12; background: radial-gradient(ellipse at center, rgba(70,30,90,0.92), rgba(15,6,24,0.97)); }
+  .statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; max-width: 640px; width: 100%; margin: 18px 0 24px; text-align: left; }
+  .statCard { background: rgba(80,30,90,0.35); border: 1px solid rgba(255,214,240,0.3); border-radius: 14px; padding: 14px 18px; }
+  .statCard .statLabel { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 4px; }
+  .statCard .statValue { font-size: 22px; font-weight: 800; color: #ffe3f5; }
+  .statSkinRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+  .statSkinDot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); }
+  .statSkinDot.locked { filter: grayscale(0.9) brightness(0.45); }
 
   #touchControls { position: absolute; inset: 0; display: none; pointer-events: none; }
   .touch-active #touchControls { display: block; }
@@ -137,6 +164,7 @@ export class UI {
         <div class="title">Pinkflight</div>
         <div class="goal">Light the <span id="beaconCount">0 / 4</span> wishlights, then glide home to the Blossom Ring</div>
       </div>
+      <div id="gemCounter" class="panel-text"><span class="icon">💎</span><span id="gemCount">0</span></div>
       <div id="bossBar" class="panel-text">
         <div class="bossLabel">Storm Queen</div>
         <div class="bar-track"><div id="bossHpFill" class="bar-fill" style="width:100%"></div></div>
@@ -169,6 +197,7 @@ export class UI {
           <button id="btnFire" class="touchBtn fire">🔥</button>
         </div>
       </div>
+      <button id="pauseBtn" title="Pause (Esc)">⏸</button>
     `;
     document.getElementById('app').appendChild(hud);
     this.els = {
@@ -187,6 +216,9 @@ export class UI {
       bossBar: hud.querySelector('#bossBar'),
       bossHpFill: hud.querySelector('#bossHpFill'),
       bossIntro: hud.querySelector('#bossIntro'),
+      pauseBtn: hud.querySelector('#pauseBtn'),
+      gemCounter: hud.querySelector('#gemCounter'),
+      gemCount: hud.querySelector('#gemCount'),
     };
     this._weatherPromptTimeout = null;
     this._unlockToastTimeout = null;
@@ -194,9 +226,13 @@ export class UI {
     this.startOverlay = this._buildStart();
     this.winOverlay = this._buildWin();
     this.raceResultOverlay = this._buildRaceResult();
+    this.pauseOverlay = this._buildPause();
+    this.statsOverlay = this._buildStats();
     document.getElementById('app').appendChild(this.startOverlay);
     document.getElementById('app').appendChild(this.winOverlay);
+    document.getElementById('app').appendChild(this.pauseOverlay);
     document.getElementById('app').appendChild(this.raceResultOverlay);
+    document.getElementById('app').appendChild(this.statsOverlay);
 
     this._hitFlashTimeout = null;
   }
@@ -286,6 +322,7 @@ export class UI {
           <span class="sub" id="raceBestSub">10 rings · beat the clock</span>
         </button>
       </div>
+      <button class="statsBtnLink" id="statsBtn">📊 View Stats</button>
     `;
     return el;
   }
@@ -310,6 +347,43 @@ export class UI {
       <h1>RACE COMPLETE</h1>
       <div class="flavor" id="raceResultText"></div>
       <button class="primary" id="raceRestartBtn">Race Again</button>
+    `;
+    return el;
+  }
+
+  _buildPause() {
+    const el = document.createElement('div');
+    el.className = 'overlay hidden';
+    el.id = 'pauseOverlay';
+    el.innerHTML = `
+      <h1>PAUSED</h1>
+      <div class="sliderRow">
+        <label for="musicSlider">Music</label>
+        <input type="range" id="musicSlider" min="0" max="100" value="80" />
+        <span class="sliderVal" id="musicSliderVal">80%</span>
+      </div>
+      <div class="sliderRow">
+        <label for="sfxSlider">Sound</label>
+        <input type="range" id="sfxSlider" min="0" max="100" value="80" />
+        <span class="sliderVal" id="sfxSliderVal">80%</span>
+      </div>
+      <div class="pauseButtons">
+        <button class="primary" id="resumeBtn">Resume</button>
+        <button class="secondary" id="quitBtn">Quit to Menu</button>
+      </div>
+    `;
+    return el;
+  }
+
+  _buildStats() {
+    const el = document.createElement('div');
+    el.className = 'overlay hidden';
+    el.id = 'statsOverlay';
+    el.innerHTML = `
+      <h1>YOUR JOURNEY</h1>
+      <div class="statSkinRow" id="statSkinRow"></div>
+      <div class="statsGrid" id="statsGrid"></div>
+      <button class="primary" id="statsCloseBtn">Back</button>
     `;
     return el;
   }
@@ -455,6 +529,23 @@ export class UI {
     this._unlockToastTimeout = setTimeout(() => this.els.unlockToast.classList.remove('show'), 4500);
   }
 
+  // --- Wishgems ---
+
+  showGemCounter() {
+    this.els.gemCounter.classList.add('show');
+  }
+
+  hideGemCounter() {
+    this.els.gemCounter.classList.remove('show');
+  }
+
+  updateGemCount(count) {
+    this.els.gemCount.textContent = count;
+    this.els.gemCounter.classList.add('pulse');
+    clearTimeout(this._gemPulseTimeout);
+    this._gemPulseTimeout = setTimeout(() => this.els.gemCounter.classList.remove('pulse'), 220);
+  }
+
   // --- Storm Queen boss ---
 
   showBossIntro() {
@@ -543,5 +634,109 @@ export class UI {
       : `Finished in ${timeStr}. Best so far: ${bestStr}.`;
     this.raceResultOverlay.querySelector('#raceResultText').textContent = text;
     this.raceResultOverlay.classList.remove('hidden');
+  }
+
+  // --- Pause menu ---
+
+  onPauseButtonClick(cb) {
+    this.els.pauseBtn.addEventListener('click', cb);
+  }
+
+  onResume(cb) {
+    this.pauseOverlay.querySelector('#resumeBtn').addEventListener('click', cb);
+  }
+
+  onQuit(cb) {
+    this.pauseOverlay.querySelector('#quitBtn').addEventListener('click', cb);
+  }
+
+  // Wires the volume sliders to live callbacks and sets their initial
+  // position from saved settings (values 0..1).
+  bindVolumeSliders(initialMusic, initialSfx, onMusicChange, onSfxChange) {
+    const musicSlider = this.pauseOverlay.querySelector('#musicSlider');
+    const sfxSlider = this.pauseOverlay.querySelector('#sfxSlider');
+    const musicVal = this.pauseOverlay.querySelector('#musicSliderVal');
+    const sfxVal = this.pauseOverlay.querySelector('#sfxSliderVal');
+    musicSlider.value = Math.round(initialMusic * 100);
+    sfxSlider.value = Math.round(initialSfx * 100);
+    musicVal.textContent = `${musicSlider.value}%`;
+    sfxVal.textContent = `${sfxSlider.value}%`;
+    musicSlider.addEventListener('input', () => {
+      musicVal.textContent = `${musicSlider.value}%`;
+      onMusicChange(musicSlider.value / 100);
+    });
+    sfxSlider.addEventListener('input', () => {
+      sfxVal.textContent = `${sfxSlider.value}%`;
+      onSfxChange(sfxSlider.value / 100);
+    });
+  }
+
+  showPause() {
+    this.pauseOverlay.classList.remove('hidden');
+  }
+
+  hidePause() {
+    this.pauseOverlay.classList.add('hidden');
+  }
+
+  showPauseButton() {
+    this.els.pauseBtn.style.display = 'flex';
+  }
+
+  hidePauseButton() {
+    this.els.pauseBtn.style.display = 'none';
+  }
+
+  onOpenStats(cb) {
+    document.getElementById('statsBtn').addEventListener('click', cb);
+  }
+
+  onCloseStats(cb) {
+    this.statsOverlay.querySelector('#statsCloseBtn').addEventListener('click', cb);
+  }
+
+  // Populates the stats overlay from a progress object (see progress.js) and
+  // the full DRAGON_SKINS list, then reveals it.
+  showStats(progress, skins) {
+    const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+    const skinRow = this.statsOverlay.querySelector('#statSkinRow');
+    skinRow.innerHTML = '';
+    for (const skin of skins) {
+      const unlocked = progress.unlocked.includes(skin.id);
+      const dot = document.createElement('div');
+      dot.className = 'statSkinDot' + (unlocked ? '' : ' locked');
+      dot.title = unlocked ? skin.name : `Locked — ${skin.unlockHint}`;
+      dot.style.background = skin.animated
+        ? 'conic-gradient(from 0deg, #ff5f5f, #ffd166, #7dff9c, #5fe0ff, #a878ff, #ff5fbf, #ff5f5f)'
+        : `linear-gradient(135deg, ${hex(skin.body)}, ${hex(skin.belly)})`;
+      skinRow.appendChild(dot);
+    }
+
+    const cards = [
+      ['Skins Unlocked', `${progress.unlocked.length} / ${skins.length}`],
+      ['Best Race Time', progress.bestRaceTime !== null ? `${progress.bestRaceTime.toFixed(1)}s` : '—'],
+      ['Easy Skies', progress.completedEasy ? '✓ Complete' : 'Not yet'],
+      ['Hard Skies', progress.completedHard ? '✓ Complete' : 'Not yet'],
+      ['Storm Survived', progress.stormCompletion ? '✓ Yes' : 'Not yet'],
+      ['Flights Completed', `${progress.flightsCompleted}`],
+      ['Wishgems Collected', `${progress.gemsCollected}`],
+      ['Best Gems in One Flight', `${progress.bestGemsInFlight}`],
+      ['Storm Sprites Scared', `${progress.spritesScared}`],
+    ];
+    const grid = this.statsOverlay.querySelector('#statsGrid');
+    grid.innerHTML = cards
+      .map(([label, value]) => `
+        <div class="statCard">
+          <div class="statLabel">${label}</div>
+          <div class="statValue">${value}</div>
+        </div>
+      `)
+      .join('');
+
+    this.statsOverlay.classList.remove('hidden');
+  }
+
+  hideStats() {
+    this.statsOverlay.classList.add('hidden');
   }
 }

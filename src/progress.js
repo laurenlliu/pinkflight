@@ -11,6 +11,9 @@ const DEFAULT_PROGRESS = {
   bestRaceTime: null,
   spritesScared: 0,
   stormCompletion: false,
+  gemsCollected: 0,
+  bestGemsInFlight: 0,
+  flightsCompleted: 0,
 };
 
 function load() {
