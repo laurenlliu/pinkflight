@@ -62,8 +62,14 @@ const weather = createWeather(world, scene);
 const settings = loadSettings();
 ui.bindVolumeSliders(
   settings.musicVolume, settings.sfxVolume,
-  (v) => { sound.setMusicVolume(v); saveSettings({ musicVolume: v }); },
-  (v) => { sound.setSfxVolume(v); saveSettings({ sfxVolume: v }); }
+  (v) => { sound.setMusicVolume(settings.musicMuted ? 0 : v); saveSettings({ musicVolume: v }); },
+  (v) => { sound.setSfxVolume(v); saveSettings({ sfxVolume: v }); },
+  settings.musicMuted,
+  (muted) => {
+    settings.musicMuted = muted;
+    sound.setMusicVolume(muted ? 0 : settings.musicVolume);
+    saveSettings({ musicMuted: muted });
+  }
 );
 
 const bestTime = getBestTime();
@@ -110,7 +116,7 @@ function beginFlight(chosenMode) {
   ui.showPauseButton();
   startTime = performance.now();
   sound.unlock();
-  sound.setMusicVolume(settings.musicVolume);
+  sound.setMusicVolume(settings.musicMuted ? 0 : settings.musicVolume);
   sound.setSfxVolume(settings.sfxVolume);
   sound.playTakeoff();
 }
