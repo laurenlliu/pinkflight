@@ -150,7 +150,7 @@ export class UI {
       <h1>PINKFLIGHT</h1>
       <div class="flavor">Somewhere above the Bloomlands, a little dragon dreams of the open sky. Scattered across the hills are wishlights, each waiting for a spark of courage to set it glowing. Find them, light them with your flame, then glide home to the Blossom Ring before the stars come out.</div>
       ${isTouch ? '' : `<div class="controls">
-        <div><b>W / S</b></div><div>Dive / Climb</div>
+        <div><b>W / S</b></div><div>Climb / Dive</div>
         <div><b>A / D</b></div><div>Turn Left / Right</div>
         <div><b>Space</b></div><div>Flap (lift boost / take off)</div>
         <div><b>Shift</b></div><div>Speed boost</div>
@@ -231,8 +231,8 @@ export class UI {
       const deadzone = 12;
       controls.setTouch('yawLeft', dx < -deadzone);
       controls.setTouch('yawRight', dx > deadzone);
-      controls.setTouch('pitchDown', dy < -deadzone);
-      controls.setTouch('pitchUp', dy > deadzone);
+      controls.setTouch('pitchUp', dy < -deadzone);
+      controls.setTouch('pitchDown', dy > deadzone);
     };
 
     base.addEventListener('touchstart', (e) => {

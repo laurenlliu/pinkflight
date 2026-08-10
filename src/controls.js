@@ -1,6 +1,6 @@
 const KEY_MAP = {
-  KeyW: 'pitchDown', ArrowUp: 'pitchDown',
-  KeyS: 'pitchUp', ArrowDown: 'pitchUp',
+  KeyW: 'pitchUp', ArrowUp: 'pitchUp',
+  KeyS: 'pitchDown', ArrowDown: 'pitchDown',
   KeyA: 'yawLeft', ArrowLeft: 'yawLeft',
   KeyD: 'yawRight', ArrowRight: 'yawRight',
   ShiftLeft: 'boost', ShiftRight: 'boost',
