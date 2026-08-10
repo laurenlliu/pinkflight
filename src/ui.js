@@ -48,6 +48,7 @@ const STYLE = `
   .modeBtn .sub { font-size: 12px; font-weight: 500; opacity: 0.85; letter-spacing: 0.5px; }
   .modeBtn.easy { background: linear-gradient(180deg,#ffb3e0,#ff6fb0); }
   .modeBtn.hard { background: linear-gradient(180deg,#d9a8ff,#b06fe0); }
+  .modeBtn.race { background: linear-gradient(180deg,#7fe8f5,#2ab8cc); }
 
   .overlay button.primary { pointer-events: all; cursor: pointer; background: linear-gradient(180deg,#ffd166,#ff9f5a); border: none; color: #3a1608; font-weight: 800; font-size: 17px; letter-spacing: 1px; padding: 14px 38px; border-radius: 12px; text-transform: uppercase; box-shadow: 0 6px 18px rgba(30,8,40,0.5); font-family: inherit; }
   .overlay button.primary:hover { filter: brightness(1.08); }
@@ -121,10 +122,17 @@ export class UI {
 
     this.startOverlay = this._buildStart();
     this.winOverlay = this._buildWin();
+    this.raceResultOverlay = this._buildRaceResult();
     document.getElementById('app').appendChild(this.startOverlay);
     document.getElementById('app').appendChild(this.winOverlay);
+    document.getElementById('app').appendChild(this.raceResultOverlay);
 
     this._hitFlashTimeout = null;
+  }
+
+  setRaceBestHint(text) {
+    const el = document.getElementById('raceBestSub');
+    if (el) el.textContent = text;
   }
 
   _buildStart() {
@@ -152,6 +160,10 @@ export class UI {
           <span>⚡ Hard Skies</span>
           <span class="sub">8 wishlights · mischievous Storm Sprites</span>
         </button>
+        <button class="modeBtn race" data-mode="race">
+          <span>🏁 Ring Race</span>
+          <span class="sub" id="raceBestSub">10 rings · beat the clock</span>
+        </button>
       </div>
     `;
     return el;
@@ -165,6 +177,18 @@ export class UI {
       <h1>FLIGHT COMPLETE</h1>
       <div class="flavor" id="winText">Every wishlight glows across the Bloomlands. Well flown, little dragon.</div>
       <button class="primary" id="restartBtn">Fly Again</button>
+    `;
+    return el;
+  }
+
+  _buildRaceResult() {
+    const el = document.createElement('div');
+    el.className = 'overlay hidden';
+    el.id = 'raceResultOverlay';
+    el.innerHTML = `
+      <h1>RACE COMPLETE</h1>
+      <div class="flavor" id="raceResultText"></div>
+      <button class="primary" id="raceRestartBtn">Race Again</button>
     `;
     return el;
   }
@@ -307,27 +331,28 @@ export class UI {
       this.setPrompt('');
     }
 
-    if (dragon && beacons) this._updateCompass(dragon, litCount, totalBeacons, beacons, landingPad);
+    if (dragon && beacons) {
+      const allLit = litCount === totalBeacons;
+      let targetPos, label;
+      if (allLit) {
+        targetPos = landingPad.position;
+        label = 'Blossom Ring';
+      } else {
+        const unlit = beacons.filter((b) => !b.lit);
+        let nearest = unlit[0];
+        let nearestDist = Infinity;
+        for (const b of unlit) {
+          const d = dragon.position.distanceTo(b.position);
+          if (d < nearestDist) { nearestDist = d; nearest = b; }
+        }
+        targetPos = nearest.position;
+        label = 'Wishlight';
+      }
+      this._pointCompassAt(dragon, targetPos, label);
+    }
   }
 
-  _updateCompass(dragon, litCount, totalBeacons, beacons, landingPad) {
-    const allLit = litCount === totalBeacons;
-    let targetPos, label;
-    if (allLit) {
-      targetPos = landingPad.position;
-      label = 'Blossom Ring';
-    } else {
-      const unlit = beacons.filter((b) => !b.lit);
-      let nearest = unlit[0];
-      let nearestDist = Infinity;
-      for (const b of unlit) {
-        const d = dragon.position.distanceTo(b.position);
-        if (d < nearestDist) { nearestDist = d; nearest = b; }
-      }
-      targetPos = nearest.position;
-      label = 'Wishlight';
-    }
-
+  _pointCompassAt(dragon, targetPos, label) {
     const dx = targetPos.x - dragon.position.x;
     const dz = targetPos.z - dragon.position.z;
     const dist = Math.hypot(dx, dz);
@@ -338,5 +363,44 @@ export class UI {
 
     this.els.compassArrow.style.transform = `rotate(${deg}deg)`;
     this.els.compassLabel.textContent = `${label} · ${Math.round(dist)}m`;
+  }
+
+  // --- Ring race mode ---
+
+  setRaceMode(totalRings) {
+    this.els.goalText.innerHTML = `Ring <span id="ringCount">0 / ${totalRings}</span> &nbsp;·&nbsp; <span id="raceTimer">00:00.00</span>`;
+    this.els.ringCount = document.getElementById('ringCount');
+    this.els.raceTimer = document.getElementById('raceTimer');
+  }
+
+  updateRaceHUD(state, ringIndex, totalRings, elapsedStr, dragon, nextRingPos) {
+    if (this.els.ringCount) this.els.ringCount.textContent = `${Math.min(ringIndex, totalRings)} / ${totalRings}`;
+    if (this.els.raceTimer) this.els.raceTimer.textContent = elapsedStr;
+
+    const speedPct = Math.min(100, (state.speed / 96) * 100);
+    const altPct = Math.min(100, (state.altitude / 500) * 100);
+    this.els.speedFill.style.width = `${speedPct}%`;
+    this.els.altFill.style.width = `${altPct}%`;
+    this.els.staminaFill.style.width = `${state.stamina * 100}%`;
+
+    if (state.isLanded) {
+      this.setPrompt('Landed — flap to take off');
+    } else {
+      this.setPrompt('');
+    }
+
+    if (nextRingPos) this._pointCompassAt(dragon, nextRingPos, 'Next Ring');
+  }
+
+  onRaceRestart(cb) {
+    this.raceResultOverlay.querySelector('#raceRestartBtn').addEventListener('click', cb);
+  }
+
+  showRaceResult(timeStr, isNewBest, bestStr) {
+    const text = isNewBest
+      ? `New best time! ${timeStr} — the wind has never carried you faster.`
+      : `Finished in ${timeStr}. Best so far: ${bestStr}.`;
+    this.raceResultOverlay.querySelector('#raceResultText').textContent = text;
+    this.raceResultOverlay.classList.remove('hidden');
   }
 }

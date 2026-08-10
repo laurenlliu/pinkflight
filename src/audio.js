@@ -113,6 +113,13 @@ export class SoundEngine {
     this._envTone(1320, { type: 'sine', attack: 0.005, decay: 0.3, gain: 0.16, delay: 0.1 });
   }
 
+  playRingPass() {
+    if (!this.unlocked) return;
+    // Short bright blip, distinct from the wishlight chime.
+    this._envTone(1046.5, { type: 'sine', attack: 0.002, decay: 0.1, gain: 0.2 });
+    this._envTone(1568, { type: 'sine', attack: 0.002, decay: 0.12, gain: 0.14, delay: 0.03 });
+  }
+
   playHit() {
     if (!this.unlocked) return;
     const ctx = this.ctx;

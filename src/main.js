@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { buildStaticWorld, buildBeacons, heightAt } from './world.js';
-import { Dragon } from './dragon.js';
+import { Dragon, GROUND_CLEARANCE } from './dragon.js';
 import { Controls } from './controls.js';
 import { FireBreath } from './fire.js';
 import { UI } from './ui.js';
 import { SoundEngine } from './audio.js';
 import { createEnemies, updateEnemies, checkFireScares } from './enemies.js';
+import { buildRingCourse, updateRace, formatTime, getBestTime, maybeSaveBestTime } from './racing.js';
 
 const app = document.getElementById('app');
 
@@ -19,10 +20,10 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.5, 4000);
 
 // The static world (terrain, sky, landmarks) renders immediately behind the start
-// screen; beacons and enemies are created once the player picks a difficulty.
+// screen; beacons/enemies/rings are created once the player picks a mode.
 const world = buildStaticWorld(scene);
 const dragon = new Dragon(scene);
-dragon.position.set(0, heightAt(0, 140) + 1.2, 140);
+dragon.position.set(0, heightAt(0, 140) + GROUND_CLEARANCE, 140);
 dragon.isLanded = true;
 dragon.yaw = Math.PI;
 
@@ -32,18 +33,36 @@ const ui = new UI();
 const sound = new SoundEngine();
 ui.bindTouchControls(controls);
 
+const bestTime = getBestTime();
+if (bestTime !== null) ui.setRaceBestHint(`10 rings · best ${formatTime(bestTime)}`);
+
+let mode = null;
 let beacons = [];
 let enemies = [];
+let raceRings = [];
+let raceIndex = 0;
+let raceActive = false;
+let raceFinished = false;
 let gameWon = false;
 let startTime = null;
 let started = false;
 
-function beginFlight(difficulty) {
+function beginFlight(chosenMode) {
   if (started) return;
   started = true;
-  beacons = buildBeacons(scene, difficulty);
-  enemies = createEnemies(scene, difficulty);
-  ui.setGoalText(beacons.length);
+  mode = chosenMode;
+
+  if (mode === 'race') {
+    raceRings = buildRingCourse(scene, heightAt);
+    raceIndex = 0;
+    raceActive = true;
+    ui.setRaceMode(raceRings.length);
+  } else {
+    beacons = buildBeacons(scene, mode);
+    enemies = createEnemies(scene, mode);
+    ui.setGoalText(beacons.length);
+  }
+
   ui.hideStart();
   startTime = performance.now();
   sound.unlock();
@@ -54,6 +73,11 @@ ui.onStart(beginFlight);
 controls.onStart(() => { if (!started) beginFlight('easy'); });
 
 ui.onRestart(() => {
+  sound.unlock();
+  sound.playUIClick();
+  window.location.reload();
+});
+ui.onRaceRestart(() => {
   sound.unlock();
   sound.playUIClick();
   window.location.reload();
@@ -115,6 +139,16 @@ function checkWin(state) {
   }
 }
 
+function finishRace() {
+  raceActive = false;
+  raceFinished = true;
+  const elapsed = (performance.now() - startTime) / 1000;
+  const isNewBest = maybeSaveBestTime(elapsed);
+  const best = getBestTime();
+  ui.showRaceResult(formatTime(elapsed), isNewBest, best !== null ? formatTime(best) : '');
+  sound.playWin();
+}
+
 const clock = new THREE.Clock();
 let elapsedTime = 0;
 let prevIsLanded = true;
@@ -127,39 +161,58 @@ function frame() {
   elapsedTime += dt;
   world.sparkles.update(dt, elapsedTime);
 
-  if (started && !gameWon) {
+  const running = started && !gameWon && !raceFinished;
+
+  if (running) {
     const flapEdge = controls.consumeFlapEdge();
     const input = { ...controls.state, flapEdge };
     const state = dragon.update(dt, input, heightAt);
     const firing = controls.state.fire && !dragon.isLanded;
-    fire.update(dt, dragon, beacons, firing);
-    ui.update(state, litCount(), beacons.length, dragon, beacons, world.landingPad);
-    checkWin(state);
 
     if (state.isLanded && !prevIsLanded) sound.playLand();
     if (!state.isLanded && prevIsLanded) sound.playTakeoff();
     prevIsLanded = state.isLanded;
-
-    const lit = litCount();
-    if (lit > prevLitCount) sound.playIgnite();
-    prevLitCount = lit;
-
     if (controls.state.boost && !prevBoost && state.speed > 5) sound.playBoost();
     prevBoost = controls.state.boost;
-
     sound.update(dt, { speed: state.speed, maxSpeed: dragon.boostMaxSpeed, firing, isLanded: state.isLanded });
 
     let hitShake = 0;
-    if (enemies.length > 0) {
-      const hit = updateEnemies(dt, enemies, dragon);
-      if (hit) {
-        sound.playHit();
-        ui.flashHit();
-        hitShake = 0.6;
+
+    if (mode === 'race') {
+      fire.update(dt, dragon, [], false);
+      if (raceActive) {
+        const result = updateRace(dt, dragon, raceRings, raceIndex, elapsedTime);
+        if (result === 'advance') {
+          raceIndex++;
+          sound.playRingPass();
+        } else if (result === 'finish') {
+          sound.playRingPass();
+          finishRace();
+        }
       }
-      if (firing) {
-        const scaredCount = checkFireScares(dragon, enemies);
-        if (scaredCount > 0) sound.playScare();
+      const elapsedStr = formatTime((performance.now() - startTime) / 1000);
+      const nextRing = raceRings[raceIndex];
+      ui.updateRaceHUD(state, raceIndex, raceRings.length, elapsedStr, dragon, nextRing ? nextRing.position : null);
+    } else {
+      fire.update(dt, dragon, beacons, firing);
+      ui.update(state, litCount(), beacons.length, dragon, beacons, world.landingPad);
+      checkWin(state);
+
+      const lit = litCount();
+      if (lit > prevLitCount) sound.playIgnite();
+      prevLitCount = lit;
+
+      if (enemies.length > 0) {
+        const hit = updateEnemies(dt, enemies, dragon);
+        if (hit) {
+          sound.playHit();
+          ui.flashHit();
+          hitShake = 0.6;
+        }
+        if (firing) {
+          const scaredCount = checkFireScares(dragon, enemies);
+          if (scaredCount > 0) sound.playScare();
+        }
       }
     }
 
@@ -182,8 +235,10 @@ requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   window.__debug = {
-    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies,
+    dragon, world, heightAt, THREE, fire, controls, sound, checkFireScares, updateEnemies, camera, scene, renderer,
     get beacons() { return beacons; },
     get enemies() { return enemies; },
+    get raceRings() { return raceRings; },
+    get raceIndex() { return raceIndex; },
   };
 }
