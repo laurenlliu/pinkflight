@@ -238,7 +238,11 @@ function updateCamera(dt, shakeTarget) {
     camPos.copy(desired);
     camInit = true;
   } else {
-    camPos.lerp(desired, 1 - Math.pow(0.0025, dt));
+    // Was 0.0025 (~0.5s to settle) — turning felt delayed because the chase
+    // cam took half a second to swing around behind a new heading. 0.0002
+    // cuts that to ~0.35s: still has a bit of cinematic trailing lag on
+    // position, but reads as responsive rather than sluggish.
+    camPos.lerp(desired, 1 - Math.pow(0.0002, dt));
   }
   camera.position.copy(camPos);
 
@@ -251,8 +255,12 @@ function updateCamera(dt, shakeTarget) {
     camera.position.z += Math.sin(shakeT * 29.3 + 3.1) * shakeAmp * 0.6;
   }
 
+  // Look direction converges faster than position (0.00002 vs 0.0002 above)
+  // — where the camera points is what actually reads as "turning", so it
+  // gets the snappier response; position keeps a little more trailing lag
+  // for a cinematic chase-cam feel without looking sluggish.
   const lookAhead = new THREE.Vector3(0, 12, -70).applyQuaternion(dragon.group.quaternion).add(dragon.group.position);
-  camLookTarget.lerp(lookAhead, 1 - Math.pow(0.001, dt));
+  camLookTarget.lerp(lookAhead, 1 - Math.pow(0.00002, dt));
   camera.up.set(0, 1, 0);
   camera.lookAt(camLookTarget);
 }
