@@ -113,6 +113,25 @@ ui.bindVolumeSliders(
   }
 );
 
+// Manual override on top of the automatic adaptive-quality check further
+// down: a player can force the cheap settings themselves for a device that
+// sits right on the fence. Applied immediately if they turned it on in a
+// previous session, and marks the auto-check as already "decided" so it
+// doesn't fight an explicit choice either way.
+if (settings.lowGraphics) {
+  bloomPass.enabled = false;
+  fire.setLowQuality();
+}
+ui.bindLowGraphicsToggle(settings.lowGraphics, (on) => {
+  settings.lowGraphics = on;
+  saveSettings({ lowGraphics: on });
+  perfChecked = true;
+  bloomPass.enabled = !on;
+  renderer.shadowMap.enabled = on ? false : renderer.shadowMap.enabled;
+  if (on) fire.setLowQuality();
+  else fire.qualityScale = 1;
+});
+
 const bestTime = getBestTime();
 if (bestTime !== null) ui.setRaceBestHint(`10 rings · best ${formatTime(bestTime)}`);
 

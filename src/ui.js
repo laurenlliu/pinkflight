@@ -126,6 +126,8 @@ const STYLE = `
   .muteBtn:hover { background: rgba(80,30,90,0.8); }
   .muteBtn.muted { background: rgba(255,95,95,0.35); border-color: rgba(255,95,95,0.5); }
   .pauseButtons { display: flex; gap: 14px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+  .toggleRow { pointer-events: all; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 14px; max-width: 320px; margin: 4px auto 0; padding: 8px 2px; text-align: left; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9; }
+  .toggleRow input[type="checkbox"] { pointer-events: all; width: 18px; height: 18px; accent-color: #ff6fb0; }
 
   .statsBtnLink { pointer-events: all; cursor: pointer; background: none; border: none; color: #f0d9ee; opacity: 0.8; font-family: inherit; font-size: 13px; letter-spacing: 1px; text-decoration: underline; margin-top: 6px; }
   .statsBtnLink:hover { opacity: 1; }
@@ -373,6 +375,10 @@ export class UI {
         <span class="sliderVal" id="sfxSliderVal">80%</span>
         <button class="muteBtn" id="sfxMuteBtn" title="Mute sound">🔊</button>
       </div>
+      <label class="toggleRow" for="lowGfxToggle">
+        <span>Low graphics mode</span>
+        <input type="checkbox" id="lowGfxToggle" />
+      </label>
       <div class="pauseButtons">
         <button class="primary" id="resumeBtn">Resume</button>
         <button class="secondary" id="quitBtn">Quit to Menu</button>
@@ -654,6 +660,14 @@ export class UI {
 
   onQuit(cb) {
     this.pauseOverlay.querySelector('#quitBtn').addEventListener('click', cb);
+  }
+
+  // Lets a player force shadows/bloom off themselves, on top of the automatic
+  // adaptive-quality check, for devices that sit right on the fence.
+  bindLowGraphicsToggle(initial, onChange) {
+    const toggle = this.pauseOverlay.querySelector('#lowGfxToggle');
+    toggle.checked = initial;
+    toggle.addEventListener('change', () => onChange(toggle.checked));
   }
 
   // Wires a single volume slider + mute button pair. The mute button is a

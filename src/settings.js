@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'pinkflight_settings';
 
-const DEFAULTS = { musicVolume: 0.8, sfxVolume: 0.8, musicMuted: false, sfxMuted: false };
+const DEFAULTS = { musicVolume: 0.8, sfxVolume: 0.8, musicMuted: false, sfxMuted: false, lowGraphics: false };
 
 export function loadSettings() {
   try {
