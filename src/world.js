@@ -4,7 +4,13 @@ import { createNoise2D } from 'simplex-noise';
 const noise2D = createNoise2D(() => 0.4271);
 
 const WORLD_SIZE = 3600;
-const SEGMENTS = 220;
+// 160 instead of 220 cuts the terrain from ~97k to ~51k triangles — one
+// static mesh, one draw call either way, but fewer vertices for the GPU to
+// transform every frame. heightAt() is a continuous function independent of
+// this, so physics/collision fidelity is unaffected; only the mesh's visual
+// facet size grows slightly, which barely reads on an already-faceted
+// flat-shaded low-poly look.
+const SEGMENTS = 160;
 
 function fractalNoise(x, z, octaves = 5, freq = 0.0016, amp = 1, lac = 2.05, gain = 0.5) {
   let sum = 0, a = amp, f = freq, norm = 0;
