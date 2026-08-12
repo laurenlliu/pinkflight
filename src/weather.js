@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updateCelestial } from './world.js';
 
 // Time-of-day keyframes around a 0..1 cycle. Dusk sits at both ends since
 // it's Pinkflight's "home" look — the cycle drifts through night/dawn/day
@@ -116,6 +117,13 @@ export function createWeather(world, scene) {
     world.sun.intensity = sunI;
     world.rim.color.copy(c.rim);
     world.rim.intensity = rimI;
+
+    updateCelestial(world.celestial, dayTime);
+    // Clouded over during a storm — fade both out rather than have the sun
+    // shine implausibly through the dark storm sky.
+    const stormFade = 1 - stormT * 0.85;
+    world.celestial.sun.material.opacity *= stormFade;
+    world.celestial.moon.material.opacity *= stormFade;
 
     return { windForce, stormIntensity: stormT, isStorm: stormActive, dayTime };
   }

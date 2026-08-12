@@ -110,6 +110,61 @@ function buildSky(scene) {
   return sky;
 }
 
+function makeGlowTexture(inner, outer) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(0.35, outer);
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
+// Sun and moon are simple billboarded sprites (always face the camera, no
+// per-frame lookAt needed) that arc across the sky in sync with weather.js's
+// day/night cycle — see updateCelestial() below for the actual positioning.
+function buildCelestial(scene) {
+  const sunMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture('rgba(255,250,235,1)', 'rgba(255,210,140,0.9)'),
+    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+  });
+  const sun = new THREE.Sprite(sunMat);
+  sun.scale.set(260, 260, 1);
+  sun.renderOrder = -1;
+  scene.add(sun);
+
+  const moonMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture('rgba(240,245,255,1)', 'rgba(190,205,235,0.8)'),
+    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+  });
+  const moon = new THREE.Sprite(moonMat);
+  moon.scale.set(190, 190, 1);
+  moon.renderOrder = -1;
+  scene.add(moon);
+
+  return { sun, moon };
+}
+
+// Called every frame from weather.js's update(). Sun and moon sit on the
+// same great circle, a half-cycle apart (moon is antipodal to the sun) —
+// zenith for the sun lines up with dayTime's brightest keyframe (0.8) and
+// the moon's with the darkest (0.3), so they naturally trade places at
+// dawn/dusk without any separate tuning.
+const CELESTIAL_R = 2400;
+export function updateCelestial(celestial, dayTime) {
+  const phase = (dayTime - 0.8) * Math.PI * 2;
+  const sunY = Math.cos(phase);
+  const sunX = Math.sin(phase);
+  celestial.sun.position.set(sunX * CELESTIAL_R, sunY * CELESTIAL_R, -CELESTIAL_R * 0.4);
+  celestial.moon.position.set(-sunX * CELESTIAL_R, -sunY * CELESTIAL_R, -CELESTIAL_R * 0.4);
+  celestial.sun.material.opacity = THREE.MathUtils.clamp(sunY * 3, 0, 1);
+  celestial.moon.material.opacity = THREE.MathUtils.clamp(-sunY * 3, 0, 1);
+}
+
 function buildSparkles(scene) {
   const size = 32;
   const canvas = document.createElement('canvas');
@@ -394,7 +449,9 @@ export function buildStaticWorld(scene) {
   rim.position.set(500, 200, -600);
   scene.add(rim);
 
-  return { terrain, spire, landingPad, sparkles, sky, ambient, sun, rim, worldSize: WORLD_SIZE };
+  const celestial = buildCelestial(scene);
+
+  return { terrain, spire, landingPad, sparkles, sky, ambient, sun, rim, celestial, worldSize: WORLD_SIZE };
 }
 
 // Keeps the sun's shadow frustum tight and centered on the player by
