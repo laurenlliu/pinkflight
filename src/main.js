@@ -42,7 +42,14 @@ const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerH
 // Bloom makes the fire breath, gems, and wishlights actually glow instead of
 // just being bright flat-shaded shapes. Threshold is high so it only catches
 // genuinely emissive/bright spots, not the whole sunlit scene.
-const composer = new EffectComposer(renderer);
+// EffectComposer's render target has no multisampling by default, which
+// would silently throw away the renderer's antialias:true and make the
+// low-poly flat-shaded edges look jagged — samples:4 here restores it.
+const renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+  type: THREE.HalfFloatType,
+  samples: 4,
+});
+const composer = new EffectComposer(renderer, renderTarget);
 composer.addPass(new RenderPass(scene, camera));
 // Bloom's blur chain is rendered at half resolution — it's a soft effect anyway,
 // so the quality loss is invisible but the cost is ~4x cheaper.
@@ -91,12 +98,18 @@ const settings = loadSettings();
 ui.bindVolumeSliders(
   settings.musicVolume, settings.sfxVolume,
   (v) => { sound.setMusicVolume(settings.musicMuted ? 0 : v); saveSettings({ musicVolume: v }); },
-  (v) => { sound.setSfxVolume(v); saveSettings({ sfxVolume: v }); },
+  (v) => { sound.setSfxVolume(settings.sfxMuted ? 0 : v); saveSettings({ sfxVolume: v }); },
   settings.musicMuted,
   (muted) => {
     settings.musicMuted = muted;
     sound.setMusicVolume(muted ? 0 : settings.musicVolume);
     saveSettings({ musicMuted: muted });
+  },
+  settings.sfxMuted,
+  (muted) => {
+    settings.sfxMuted = muted;
+    sound.setSfxVolume(muted ? 0 : settings.sfxVolume);
+    saveSettings({ sfxMuted: muted });
   }
 );
 
@@ -145,7 +158,7 @@ function beginFlight(chosenMode) {
   startTime = performance.now();
   sound.unlock();
   sound.setMusicVolume(settings.musicMuted ? 0 : settings.musicVolume);
-  sound.setSfxVolume(settings.sfxVolume);
+  sound.setSfxVolume(settings.sfxMuted ? 0 : settings.sfxVolume);
   sound.playTakeoff();
 }
 

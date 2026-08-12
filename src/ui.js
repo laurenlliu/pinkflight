@@ -371,6 +371,7 @@ export class UI {
         <label for="sfxSlider">Sound</label>
         <input type="range" id="sfxSlider" min="0" max="100" value="80" />
         <span class="sliderVal" id="sfxSliderVal">80%</span>
+        <button class="muteBtn" id="sfxMuteBtn" title="Mute sound">🔊</button>
       </div>
       <div class="pauseButtons">
         <button class="primary" id="resumeBtn">Resume</button>
@@ -655,35 +656,26 @@ export class UI {
     this.pauseOverlay.querySelector('#quitBtn').addEventListener('click', cb);
   }
 
-  // Wires the volume sliders to live callbacks and sets their initial
-  // position from saved settings (values 0..1). The music mute button is a
+  // Wires a single volume slider + mute button pair. The mute button is a
   // separate on/off flag layered on top of the slider: muting doesn't erase
   // the saved volume, it just silences it until unmuted.
-  bindVolumeSliders(initialMusic, initialSfx, onMusicChange, onSfxChange, initialMuted, onMuteToggle) {
-    const musicSlider = this.pauseOverlay.querySelector('#musicSlider');
-    const sfxSlider = this.pauseOverlay.querySelector('#sfxSlider');
-    const musicVal = this.pauseOverlay.querySelector('#musicSliderVal');
-    const sfxVal = this.pauseOverlay.querySelector('#sfxSliderVal');
-    const muteBtn = this.pauseOverlay.querySelector('#musicMuteBtn');
-    musicSlider.value = Math.round(initialMusic * 100);
-    sfxSlider.value = Math.round(initialSfx * 100);
-    musicVal.textContent = `${musicSlider.value}%`;
-    sfxVal.textContent = `${sfxSlider.value}%`;
-    musicSlider.addEventListener('input', () => {
-      musicVal.textContent = `${musicSlider.value}%`;
-      onMusicChange(musicSlider.value / 100);
-    });
-    sfxSlider.addEventListener('input', () => {
-      sfxVal.textContent = `${sfxSlider.value}%`;
-      onSfxChange(sfxSlider.value / 100);
+  _bindVolumeControl(sliderId, valId, muteBtnId, label, initial, onChange, initialMuted, onMuteToggle) {
+    const slider = this.pauseOverlay.querySelector(`#${sliderId}`);
+    const val = this.pauseOverlay.querySelector(`#${valId}`);
+    const muteBtn = this.pauseOverlay.querySelector(`#${muteBtnId}`);
+    slider.value = Math.round(initial * 100);
+    val.textContent = `${slider.value}%`;
+    slider.addEventListener('input', () => {
+      val.textContent = `${slider.value}%`;
+      onChange(slider.value / 100);
     });
 
     let muted = initialMuted;
     const renderMute = () => {
       muteBtn.textContent = muted ? '🔇' : '🔊';
       muteBtn.classList.toggle('muted', muted);
-      muteBtn.title = muted ? 'Unmute music' : 'Mute music';
-      musicSlider.disabled = muted;
+      muteBtn.title = muted ? `Unmute ${label}` : `Mute ${label}`;
+      slider.disabled = muted;
     };
     renderMute();
     muteBtn.addEventListener('click', () => {
@@ -691,6 +683,13 @@ export class UI {
       renderMute();
       onMuteToggle(muted);
     });
+  }
+
+  // Wires both volume sliders to live callbacks and sets their initial
+  // position from saved settings (values 0..1).
+  bindVolumeSliders(initialMusic, initialSfx, onMusicChange, onSfxChange, initialMusicMuted, onMusicMuteToggle, initialSfxMuted, onSfxMuteToggle) {
+    this._bindVolumeControl('musicSlider', 'musicSliderVal', 'musicMuteBtn', 'music', initialMusic, onMusicChange, initialMusicMuted, onMusicMuteToggle);
+    this._bindVolumeControl('sfxSlider', 'sfxSliderVal', 'sfxMuteBtn', 'sound', initialSfx, onSfxChange, initialSfxMuted, onSfxMuteToggle);
   }
 
   showPause() {
