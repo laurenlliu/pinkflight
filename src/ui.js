@@ -576,7 +576,11 @@ export class UI {
     this.els.bossBar.classList.remove('show');
   }
 
-  update(state, litCount, totalBeacons) {
+  // readyToLand: all wishlights lit and close enough to the Blossom Ring to
+  // finish, but not yet actually landed — nudges the player toward slowing
+  // down and touching down rather than just flying near/through the ring
+  // and wondering why nothing happened.
+  update(state, litCount, totalBeacons, readyToLand) {
     this.els.beaconCount.textContent = `${litCount} / ${totalBeacons}`;
     const speedPct = Math.min(100, (state.speed / 96) * 100);
     const altPct = Math.min(100, (state.altitude / 500) * 100);
@@ -587,6 +591,8 @@ export class UI {
 
     if (state.isLanded) {
       this.setPrompt('Landed — flap to take off');
+    } else if (readyToLand) {
+      this.setPrompt('Slow down and land in the Blossom Ring!');
     } else {
       this.setPrompt('');
     }

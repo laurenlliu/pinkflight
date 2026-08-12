@@ -362,7 +362,7 @@ function checkWin(state, isStorm) {
   if (mode !== 'easy') return;
   if (beacons.length > 0 && litCount() === beacons.length && state.isLanded) {
     const distToPad = dragon.position.distanceTo(world.landingPad.position);
-    if (distToPad < world.landingPad.radius + 10) {
+    if (distToPad < world.landingPad.radius + 30) {
       gameWon = true;
       const elapsed = (performance.now() - startTime) / 1000;
       const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
@@ -488,7 +488,9 @@ function frame() {
       updateWaypoint(nextRing ? nextRing.position : null, 'Next Ring');
     } else {
       fire.update(dt, dragon, beacons, firing);
-      ui.update(state, litCount(), beacons.length);
+      const readyToLand = mode === 'easy' && !gameWon && beacons.length > 0 && litCount() === beacons.length
+        && dragon.position.distanceTo(world.landingPad.position) < world.landingPad.radius + 120;
+      ui.update(state, litCount(), beacons.length, readyToLand);
       checkWin(state, weatherState.isStorm);
 
       const lit = litCount();
